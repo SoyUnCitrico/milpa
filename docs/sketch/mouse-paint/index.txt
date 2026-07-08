@@ -1,0 +1,63 @@
+3:I[4707,[],""]
+5:I[6423,[],""]
+4:["slug","mouse-paint","d"]
+0:["qf_zfFTdvPInMAMZjIJfX",[[["",{"children":["sketch",{"children":[["slug","mouse-paint","d"],{"children":["__PAGE__?{\"slug\":\"mouse-paint\"}",{}]}]}]},"$undefined","$undefined",true],["",{"children":["sketch",{"children":[["slug","mouse-paint","d"],{"children":["__PAGE__",{},[["$L1","$L2",null],null],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children","$4","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/75d241a800c6b66c.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"es","className":"__variable_bb2e19","children":["$","body",null,{"className":"min-h-screen bg-fondo font-mono text-crema antialiased","children":["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":"404"}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],"notFoundStyles":[]}]}]}]],null],null],["$L6",null]]]]
+6:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"charSet":"utf-8"}],["$","title","2",{"children":"Mouse Paint — MILPA"}],["$","meta","3",{"name":"description","content":"Herramienta de pintura: el lienzo nunca se limpia, así que se acumula. Presionar deja un círculo blanco, soltar un punto, y arrastrar pinta elipses cuyo tono recorre el espectro HSB mientras se trazan cuadrados que rotan. Del taller de Introducción al Código Creativo de mndrn.mx."}],["$","link","4",{"rel":"icon","href":"/icon.svg?e5bdd04178928d30","type":"image/svg+xml","sizes":"any"}]]
+1:null
+7:I[9999,["648","static/chunks/648-a963bf0325acd59f.js","248","static/chunks/248-87227d3e7607ded8.js","935","static/chunks/app/sketch/%5Bslug%5D/page-10191fcad86abb1b.js"],"default"]
+8:T47c,  let hueZ, angCuadrado, hue;
+
+  function setup () {
+    createCanvas(500, 500).parent("sketch-container");
+    background(0);
+    colorMode(HSB);
+    hueZ = 0;
+    angCuadrado = 0;
+  }
+  
+  function draw () {
+    // background(0);
+    
+    if(mouseIsPressed) {
+      push();
+      rectMode(CENTER);
+      strokeWeight(2);
+      stroke(200,20,220);
+      noFill();
+      translate(mouseX,mouseY);
+      rotate(angCuadrado);
+      rect(0,0,10);
+      pop();
+      angCuadrado += 0.05;
+   }  
+     
+  }
+  
+  // Funcion que se ejecuta al presionar algún boton del mouse
+  function mousePressed () {
+    fill(255);
+    noStroke();
+    ellipse(mouseX,mouseY,50);
+  }
+  
+  // Funcion que se ejecuta al soltar el mouse
+  function mouseReleased () {
+    stroke(120,10,255);
+    strokeWeight(5);
+    point(mouseX,mouseY);
+  }
+  
+  
+  function mouseDragged () {
+    push();
+    noStroke();
+    fill(hueZ,360,360);
+    ellipse(mouseX,mouseY, 30);
+    hueZ += 2;
+    if(hueZ > 360) {
+      // reinicio de la variable de color al llegar a 360
+      hueZ = 0; 
+    }
+    pop();
+    // console.log(hue);
+  }2:["$","$L7",null,{"slug":"mouse-paint","code":"$8"}]

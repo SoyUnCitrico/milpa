@@ -1,0 +1,175 @@
+3:I[4707,[],""]
+5:I[6423,[],""]
+4:["slug","sunset-rev","d"]
+0:["qf_zfFTdvPInMAMZjIJfX",[[["",{"children":["sketch",{"children":[["slug","sunset-rev","d"],{"children":["__PAGE__?{\"slug\":\"sunset-rev\"}",{}]}]}]},"$undefined","$undefined",true],["",{"children":["sketch",{"children":[["slug","sunset-rev","d"],{"children":["__PAGE__",{},[["$L1","$L2",null],null],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children","$4","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/75d241a800c6b66c.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"es","className":"__variable_bb2e19","children":["$","body",null,{"className":"min-h-screen bg-fondo font-mono text-crema antialiased","children":["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":"404"}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],"notFoundStyles":[]}]}]}]],null],null],["$L6",null]]]]
+6:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"charSet":"utf-8"}],["$","title","2",{"children":"Relieve Rev — MILPA"}],["$","meta","3",{"name":"description","content":"Relieve de montaña generativo (vertical) trazado por una trayectoria circular con ruido a lo largo de una franja temporal. Termina con noLoop()."}],["$","link","4",{"rel":"icon","href":"/icon.svg?e5bdd04178928d30","type":"image/svg+xml","sizes":"any"}]]
+1:null
+7:I[9999,["648","static/chunks/648-a963bf0325acd59f.js","248","static/chunks/248-87227d3e7607ded8.js","935","static/chunks/app/sketch/%5Bslug%5D/page-10191fcad86abb1b.js"],"default"]
+8:Tfce,let w = 1080;
+let h = 1350;
+let t;
+let ns;
+// let nsStep = 0.014;
+let nsStep = 0.0075/2;
+// let duration = 42190;
+let duration = 42190;
+let ang = 0;
+let frame = 0;
+let startMillis;
+let fps = 30;
+let capturer = new CCapture({
+  format: 'png',
+  framerate: fps
+});
+
+function setup() {
+    createCanvas(w, h);
+      
+    ellipseMode(CENTER) 
+    rectMode(CORNERS)
+    frameRate(fps);
+
+    // ligthPink
+    colorMode(RGB, 255,255,255,100); 
+    luz1 = color(246,151,123,25);
+    luz2 = color(247,92,1);
+    luz3 = color(232,20,1);
+    
+    dark1 = color(194,104,147);
+    dark2 = color(96,42,105);
+    dark3 = color(39,15,60);
+    backColor = color(30,3,0);
+
+    blendMode(BLEND);
+    ns = random(100);
+    background(0,0);
+    // background(backColor);
+    smooth();
+    t = 0;
+}
+
+function draw() {
+    if (frame === 0) {
+        capturer.start();
+        startMillis = millis();
+        frame ++;   
+    }
+    let elapsed = millis() - startMillis;
+    t = map(elapsed, 0, duration, 0, 1);
+    // console.log(t);
+
+    if(t <= 1) {
+
+        let t3 = map(t, 0, 1, 0.5, 1);
+        relieve(t3, w*.2, w*.8, ns);
+        ns += nsStep;
+
+    } else if(t > 1
+        ) {
+        noLoop();
+        console.log('Finalizando');
+        capturer.stop();
+        capturer.save();
+        return;
+    }
+    capturer.capture(document.getElementById('defaultCanvas0'));
+}
+
+function relieve(tiempo, radioInt, radioExt, ruido) {
+    push();
+    translate(w/2, h*2/3);
+    strokeWeight(1);
+
+    let x = radioExt * cos(TWO_PI * tiempo);
+    let y = radioExt * -sin(TWO_PI * tiempo);
+    let a = radioInt * cos(TWO_PI * tiempo);
+    let b = - radioInt * noise(ruido) * -sin(TWO_PI * tiempo); 
+    // console.log(b);
+
+    // HSB
+    // let mt,br,st;
+    // mt = hue(dark3);
+    // br = brightness(dark3);
+    // br = br * noise(ruido);
+    // st = saturation(dark3);
+    // st = st * noise(ruido);
+    // stroke(mt,br,st);
+
+    // RGB
+    let relieve = color(21,35,64);
+    relieve.setAlpha(noise(ruido) * 60 + 40);
+    stroke(relieve);
+    
+    line(a,b, x, y);
+    pop();
+}
+
+function ligtRay(radioExt, separacion,anguloInicio,brillo,ruido){
+    
+    push();
+    colorMode(HSB,360,100,100,100);
+    translate(w/2, h*2/3);
+    strokeWeight(5);
+    let x = radioExt * cos(PI*(separacion)) + anguloInicio;
+    let y = radioExt * -sin(PI*(separacion));
+
+    let rayo = color(11,47,92);
+    let hu = hue(rayo);
+    let sat = saturation(rayo);
+    // let alfa = map(brillo,0,255,100,0);
+    let alfa = 100;
+    stroke(hu,sat,brillo,alfa);
+    // stroke(0);
+    point(x, y);
+    console.log(y);
+    pop();
+}
+function sunset(tiempo, alfa) {
+    colorMode(RGB,255,255,255,100);
+    push();
+    translate(w/2,h*2/3);
+    noFill();
+    strokeWeight(1);
+    // stroke(255,(255-255*log(tiempo)));
+    // let mult2 = 100-exp(4.62*tiempo);
+    // let mult2 = 100 * pow(tiempo,2)
+    // let sol = lerpColor(luz3,luz2,tiempo);   //HSB
+    let sol = lerpColor(luz2,luz3,tiempo);      //RGB
+    // let sol = lerpColor(luz2,luz3,alfa);      //RGB
+    let mult2 = 100 - (95 * pow(tiempo,0.4))  
+    // console.log(mult2);                      
+    sol.setAlpha(mult2);
+    // sol.setAlpha(alfa);
+
+    noFill();
+    stroke(sol);
+    ellipse(0,0,w*tiempo, w*tiempo);
+    
+    // Regla de tres 
+    // 138.62 == 100
+    // 100 == ???
+    // let mult = 72.14*log(1 + alpha);
+    // let mult =  5*exp(3.05*tiempo)-5;
+    // let cielo = lerpColor(dark2, dark1, tiempo) //HSB
+    // let cielo = lerpColor(dark2, dark3, tiempo*1.5) //RGB
+    let cielo = lerpColor(dark2, dark3, alfa*2) //RGB
+    // let mult = 95 * pow(tiempo,1.5) + 7
+
+    cielo.setAlpha(alfa);
+    stroke(cielo);
+    strokeWeight(1);
+    ellipse(0,0,w+h*tiempo*3/4,w+h*tiempo*3/4);
+
+    translate(-w/2,0);
+    noStroke(); 
+    fill(9,3,30);
+    rect(0,1,w,h/3);
+    pop();
+}
+
+function keyTyped() {
+    if (key === 's') {
+        saveCanvas('rev', 'png');
+    }
+}
+ 2:["$","$L7",null,{"slug":"sunset-rev","code":"$8"}]

@@ -1,0 +1,120 @@
+3:I[4707,[],""]
+5:I[6423,[],""]
+4:["slug","bolitas-vectores","d"]
+0:["qf_zfFTdvPInMAMZjIJfX",[[["",{"children":["sketch",{"children":[["slug","bolitas-vectores","d"],{"children":["__PAGE__?{\"slug\":\"bolitas-vectores\"}",{}]}]}]},"$undefined","$undefined",true],["",{"children":["sketch",{"children":[["slug","bolitas-vectores","d"],{"children":["__PAGE__",{},[["$L1","$L2",null],null],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children","$4","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/75d241a800c6b66c.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"es","className":"__variable_bb2e19","children":["$","body",null,{"className":"min-h-screen bg-fondo font-mono text-crema antialiased","children":["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":"404"}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],"notFoundStyles":[]}]}]}]],null],null],["$L6",null]]]]
+6:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"charSet":"utf-8"}],["$","title","2",{"children":"Bolitas Ping-Pong — MILPA"}],["$","meta","3",{"name":"description","content":"Tres bolitas con posición y velocidad como vectores rebotan dentro de una frontera rectangular, invirtiendo su velocidad al tocar el borde. Ejercicio de vectores del taller de mndrn.mx."}],["$","link","4",{"rel":"icon","href":"/icon.svg?e5bdd04178928d30","type":"image/svg+xml","sizes":"any"}]]
+1:null
+7:I[9999,["648","static/chunks/648-a963bf0325acd59f.js","248","static/chunks/248-87227d3e7607ded8.js","935","static/chunks/app/sketch/%5Bslug%5D/page-10191fcad86abb1b.js"],"default"]
+8:Tb07,  // Caracteristicas de la bolita 1
+  let sizeBol, posBolita, velBolita;
+  // Caracteristicas de la bolita 2
+  let sizeBol2, posBolita2, velBolita2;
+  // Caracteristicas de la bolita 3
+  let sizeBol3, posBolita3, velBolita3;
+  // Caracteristicas de la frontera
+  let initFrontera, finFrontera;
+  let bolCol, bolCol2, bolCol3;
+  let isBorder = true;
+
+
+  function setup() {
+    createCanvas(600,600).parent("sketch-container");
+    // cnv.parent('main__sketch');
+    background(220);
+    
+    // Inicialización de variables
+    sizeBol = 50;
+    posBolita = createVector(width/2 , 60);
+    velBolita = createVector(1, 2);
+    
+    sizeBol2 = 25;
+    posBolita2 = createVector(width/3, height-100);
+    velBolita2 = createVector(-5, -1);
+    
+    sizeBol3 = 10;
+    posBolita3 = createVector(width/4 + 80, 60);
+    velBolita3 = createVector(5, 7);
+    
+    initFrontera = createVector(width/4,50);
+    finFrontera = createVector(width*3/4, height-50);
+    
+    // Colores de bolitas
+    bolCol = color(30,200,220);
+    bolCol2 = color(30,200,30);
+    bolCol3 = color(200,30,180);
+    
+  }
+
+  function draw() {
+    background(0);
+    dibujaBolita(posBolita.x,posBolita.y,sizeBol,bolCol);
+    dibujaBolita(posBolita2.x,posBolita2.y,sizeBol2,bolCol2);
+    dibujaBolita(posBolita3.x,posBolita3.y,sizeBol3,bolCol3);
+    mueveBolitas();
+    frontera(initFrontera, finFrontera);
+  }
+
+  function dibujaBolita(posX,posY,sz,col) {
+    push();
+    fill(col);
+    noStroke();
+    ellipse(posX,posY,sz);
+    pop();
+  }
+
+  function mueveBolitas() { 
+    posBolita.add(velBolita);
+    posBolita2.add(velBolita2);
+    posBolita3.add(velBolita3);
+  }
+
+  function frontera(frontIni, frontFin) {
+    let inicio = frontIni.copy();
+    let final = frontFin.copy();
+    
+    // Bolita 1
+    if(posBolita.x < inicio.x || posBolita.x > final.x) {
+      velBolita.x *= -1;
+    }
+    if(posBolita.y < inicio.y || posBolita.y > final.y) {
+      velBolita.y *= -1;
+    }
+    
+    // Bolita 2
+    if(posBolita2.x < inicio.x || posBolita2.x > final.x) {
+      velBolita2.x *= -1;
+    }
+    if(posBolita2.y < inicio.y || posBolita2.y > final.y) {
+      velBolita2.y *= -1;
+    }
+    
+    // Bolita 1
+    if(posBolita3.x < inicio.x || posBolita3.x > final.x) {
+      velBolita3.x *= -1;
+    }
+    if(posBolita3.y < inicio.y || posBolita3.y > final.y) {
+      velBolita3.y *= -1;
+    }
+    
+
+    if(isBorder)
+      dibujarFrontera(inicio, final);
+  }
+
+  function dibujarFrontera(init, end) {
+    push();
+    noFill();
+    stroke(120);
+    strokeWeight(3);
+    rectMode(CORNERS);
+    rect(init.x, init.y, end.x, end.y);
+    pop();
+  }
+
+  keyPressed = () => {
+    console.log(keyCode);
+    if(keyCode == 32) {
+      isBorder = !isBorder;
+    }
+  }
+2:["$","$L7",null,{"slug":"bolitas-vectores","code":"$8"}]

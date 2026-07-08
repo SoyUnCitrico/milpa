@@ -1,0 +1,179 @@
+3:I[4707,[],""]
+5:I[6423,[],""]
+4:["slug","comp-aurea","d"]
+0:["qf_zfFTdvPInMAMZjIJfX",[[["",{"children":["sketch",{"children":[["slug","comp-aurea","d"],{"children":["__PAGE__?{\"slug\":\"comp-aurea\"}",{}]}]}]},"$undefined","$undefined",true],["",{"children":["sketch",{"children":[["slug","comp-aurea","d"],{"children":["__PAGE__",{},[["$L1","$L2",null],null],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children","$4","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/75d241a800c6b66c.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"es","className":"__variable_bb2e19","children":["$","body",null,{"className":"min-h-screen bg-fondo font-mono text-crema antialiased","children":["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":"404"}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],"notFoundStyles":[]}]}]}]],null],null],["$L6",null]]]]
+6:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"charSet":"utf-8"}],["$","title","2",{"children":"Composición Áurea — MILPA"}],["$","meta","3",{"name":"description","content":"Círculos cuyos diámetros crecen en proporción áurea (φ = 1.618) anclados a las esquinas y retículas de una rejilla, con un cuadrado central que rota. Estudio de composición geométrica; loop continuo."}],["$","link","4",{"rel":"icon","href":"/icon.svg?e5bdd04178928d30","type":"image/svg+xml","sizes":"any"}]]
+1:null
+7:I[9999,["648","static/chunks/648-a963bf0325acd59f.js","248","static/chunks/248-87227d3e7607ded8.js","935","static/chunks/app/sketch/%5Bslug%5D/page-10191fcad86abb1b.js"],"default"]
+8:T129d,// Circulos en proporciones aureas
+
+let diametroBase = 81;
+let diametroDos = diametroBase * 1.618;
+let diametroTres = diametroDos * 1.618;
+let diametroCuatro = diametroTres * 1.618;
+let diametroCinco = diametroCuatro * 1.618;
+let diametroSeis = diametroCinco * 1.618;
+
+// Vectores de posicion
+let centro; 
+let esquinaSI, esquinaSD, esquinaII, esquinaID;
+let retSI, retSD, retII, retID;
+let angle =  0;
+
+function setup() {
+  createCanvas(1000,1000);
+  centro = createVector(width/2, height/2);
+
+  esquinaSI = createVector(50, 50);
+  esquinaSD = createVector(950, 50);
+  esquinaII = createVector(50, 950);
+  esquinaID = createVector(950, 950);
+
+  retSI = createVector(350, 350);
+  retSD = createVector(650, 350);
+  retII = createVector(350, 650);
+  retID = createVector(650, 650);
+
+  rectMode(CENTER)
+}
+
+function draw() {
+  background(200);
+  
+
+
+
+  noStroke();
+  // dibujarCirculos();
+  circulosSeis();
+  cuadro();
+  circulosCinco();
+  circulosTres();
+  circulosCuatro();
+  circulosDos();
+  circulosUno(angle);
+
+  
+  // reticulas();
+
+  angle += 0.01;
+  angle %= TWO_PI;
+  console.log(angle);
+
+}
+
+function cuadro(angulo) {
+  push();
+  translate(centro.x, centro.y);
+  rotate(angle);
+  noFill();
+  strokeWeight(5)
+  stroke(0,255);
+  rect(0, 0, width*3/10, height*3/10);
+  pop();
+}
+
+function reticulas() {
+  push();
+  stroke(0);
+  rect(centro.x,centro.y,900,900);
+  line(350,50,350,950);
+  line(650,50,650,950);
+  line(50,350,950,350);
+  line(50,650,950,650);
+  pop();
+
+  // // Solo para identificar los puntos de interes
+  // push();
+  // strokeWeight(5);
+  // point(esquinaSI);
+  // point(esquinaSD);
+  // point(esquinaII);
+  // point(esquinaID);
+  // point(retSI);
+  // point(retSD);
+  // point(retII);
+  // point(retID);
+  // pop();
+}
+
+function dibujarCirculos() {
+  ellipse(centro.x, centro.y, diametroBase, diametroBase);
+  ellipse(centro.x, centro.y, diametroDos, diametroDos);
+  ellipse(centro.x, centro.y, diametroTres, diametroTres);
+  ellipse(centro.x, centro.y, diametroCuatro, diametroCuatro);
+  ellipse(centro.x, centro.y, diametroCinco, diametroCinco);
+  ellipse(centro.x, centro.y, diametroSeis, diametroSeis);
+}
+
+function circulosUno(angulo) {
+  push();
+  fill(139,19,0,255*.8);
+
+  translate(esquinaSI.x, esquinaSI.y);
+  // rotate(angle);
+
+  // gira(centro,esquinaSI.rotate(angulo));
+  ellipse(0 + diametroBase/2, 0 + diametroBase/2, diametroBase, diametroBase);
+
+  // translate(esquinaSD.x, esquinaSD.y);
+  // ellipse(0 - diametroBase/2, 0 + diametroBase/2, diametroBase, diametroBase);
+  // ellipse(0 + diametroBase/2, 0 - diametroBase/2, diametroBase, diametroBase);
+  // ellipse(0 - diametroBase/2, 0 - diametroBase/2, diametroBase, diametroBase);
+  // ellipse(centro.x, centro.y, diametroBase, diametroBase);  
+  pop();
+}
+
+function circulosDos() {
+  push();
+  fill(242,222,208,255*.5);
+  ellipse(retSI.x - diametroDos/2, retSI.y - diametroDos/2, diametroDos, diametroDos);
+  ellipse(retSD.x + diametroDos/2, retSD.y - diametroDos/2, diametroDos, diametroDos);
+  ellipse(retII.x - diametroDos/2, retII.y + diametroDos/2, diametroDos, diametroDos);
+  ellipse(retID.x + diametroDos/2, retID.y + diametroDos/2, diametroDos, diametroDos);
+  pop();
+}
+
+function circulosTres() {
+  push();
+  fill(199,208,157,255*.5);
+  ellipse(centro.x, centro.y, diametroTres, diametroTres);
+  pop();
+}
+
+function circulosCuatro() {
+  push();
+  fill(241,158,96,255*.5);
+  ellipse(esquinaSI.x + diametroCuatro/2, esquinaSI.y + diametroCuatro/2, diametroCuatro, diametroCuatro);
+  ellipse(esquinaSD.x - diametroCuatro/2, esquinaSD.y + diametroCuatro/2, diametroCuatro, diametroCuatro);
+  ellipse(esquinaII.x + diametroCuatro/2, esquinaII.y - diametroCuatro/2, diametroCuatro, diametroCuatro);
+  ellipse(esquinaID.x - diametroCuatro/2, esquinaID.y - diametroCuatro/2, diametroCuatro, diametroCuatro);
+  pop();
+}
+
+function circulosCinco() {
+  push();
+  fill(36,32,226,255*.5);
+  ellipse(esquinaSI.x + diametroCinco/2, esquinaSI.y + diametroCinco/2, diametroCinco, diametroCinco);
+  ellipse(esquinaID.x - diametroCinco/2, esquinaID.y - diametroCinco/2, diametroCinco, diametroCinco);
+  fill(229,53,35,255*.5);
+  ellipse(esquinaSD.x - diametroCinco/2, esquinaSD.y + diametroCinco/2, diametroCinco, diametroCinco);
+  ellipse(esquinaII.x + diametroCinco/2, esquinaII.y - diametroCinco/2, diametroCinco, diametroCinco);
+  pop();
+}
+
+function circulosSeis() {
+  push();
+  fill(30,152,103,255*.64);
+  ellipse(centro.x, centro.y, diametroSeis, diametroSeis);
+  pop();
+}
+
+function gira(base, vec) {
+
+  translate(base.x, base.y);
+  stroke(0);
+  strokeWeight(5);
+  line(0, 0, vec.x, vec.y);
+  rotate(vec.heading());
+}2:["$","$L7",null,{"slug":"comp-aurea","code":"$8"}]

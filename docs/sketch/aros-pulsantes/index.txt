@@ -1,0 +1,61 @@
+3:I[4707,[],""]
+5:I[6423,[],""]
+4:["slug","aros-pulsantes","d"]
+0:["qf_zfFTdvPInMAMZjIJfX",[[["",{"children":["sketch",{"children":[["slug","aros-pulsantes","d"],{"children":["__PAGE__?{\"slug\":\"aros-pulsantes\"}",{}]}]}]},"$undefined","$undefined",true],["",{"children":["sketch",{"children":[["slug","aros-pulsantes","d"],{"children":["__PAGE__",{},[["$L1","$L2",null],null],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children","$4","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/75d241a800c6b66c.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"es","className":"__variable_bb2e19","children":["$","body",null,{"className":"min-h-screen bg-fondo font-mono text-crema antialiased","children":["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":"404"}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],"notFoundStyles":[]}]}]}]],null],null],["$L6",null]]]]
+6:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"charSet":"utf-8"}],["$","title","2",{"children":"Aros Pulsantes — MILPA"}],["$","meta","3",{"name":"description","content":"Rejilla de figuras dibujadas con bucles anidados: en cada celda un punto blanco, un aro azul y un cuadrado rojo que laten al unísono. Los tamaños hacen ping-pong, produciendo el pulso. Loop continuo."}],["$","link","4",{"rel":"icon","href":"/icon.svg?e5bdd04178928d30","type":"image/svg+xml","sizes":"any"}]]
+1:null
+7:I[9999,["648","static/chunks/648-a963bf0325acd59f.js","248","static/chunks/248-87227d3e7607ded8.js","935","static/chunks/app/sketch/%5Bslug%5D/page-10191fcad86abb1b.js"],"default"]
+8:T72d,  let diametro, x,y,aumento, vel, xInicial, yInicial;
+  let size1, size2;
+
+  function setup() {
+    createCanvas(600, 600).parent("sketch-container");
+    // cnv.parent('main__sketch');
+    background(220);
+    rectMode(CENTER);
+    // diametro inicial de las figuras
+    diametro = 30;
+    // posicion de la esquina superior izuiqerda de la figura
+    xInicial = diametro*2.75;
+    yInicial = diametro*2.75;
+    // Variables que sirven para animar las figuras
+    size1 = 0;
+    size2 = 0;
+    aumento = 0.075;
+  }
+
+  function draw() {
+    background(10);
+    
+    // Este for se utiliza para dibujar las figuras a lo largo del eje vertical
+    for(let j = 0; j < diametro*16; j+= diametro*2.5){
+      
+      // Este for se utiliza para dibujar las figuras a lo largo del eje horizontal
+      for(let i = 0; i < diametro*16; i += diametro*2.5){
+        
+        // dibuja un circulo blanco pequeño
+        fill(255);
+        noStroke();
+        ellipse(xInicial + i , yInicial + j, 10) ;   
+        // dibuja un circulo azul
+        noFill();
+        strokeWeight(3);
+        stroke(0,120,255);
+        ellipse(xInicial + i , yInicial + j, diametro*2 + size1) ;      
+        // dibuja un cuadrado rojo
+        stroke(255,0,0);
+        strokeWeight(5);
+        rect(xInicial + i, yInicial + j, diametro + size2)
+        // aumenta la variable que aumenta el tamaño del circulo rojo
+        size1+=aumento;
+        
+      } 
+      // aumenta la variable que aumentael tamaño del cuadrado azul
+      size2+=aumento;
+    }
+    // condicional que cambia la direccion del aumento
+    // si la variable de aumento de la figura 2 es mayor a 50 o menor a 0 la variable de aumento cambia de direccion(aumento o disminucion)
+    if (size2 > 30 || size2 < 0) {
+      aumento *= -1;
+    }
+  }2:["$","$L7",null,{"slug":"aros-pulsantes","code":"$8"}]

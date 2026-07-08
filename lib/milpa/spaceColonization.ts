@@ -195,8 +195,7 @@ export function generateLeaf(opts: GenerateLeafOptions): Segment[] {
   } = opts;
 
   const rng = createRng(seed);
-  const starts: Point[] =
-    rootPoints && rootPoints.length > 0 ? rootPoints : [{ x: 0, y: height / 2 }];
+  const starts: Point[] = rootPoints && rootPoints.length > 0 ? rootPoints : [{ x: 0, y: height / 2 }];
 
   const attractors: Point[] = [];
   for (let i = 0; i < numAttractors; i++) {

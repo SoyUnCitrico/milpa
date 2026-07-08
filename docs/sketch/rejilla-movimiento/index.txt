@@ -1,0 +1,58 @@
+3:I[4707,[],""]
+5:I[6423,[],""]
+4:["slug","rejilla-movimiento","d"]
+0:["qf_zfFTdvPInMAMZjIJfX",[[["",{"children":["sketch",{"children":[["slug","rejilla-movimiento","d"],{"children":["__PAGE__?{\"slug\":\"rejilla-movimiento\"}",{}]}]}]},"$undefined","$undefined",true],["",{"children":["sketch",{"children":[["slug","rejilla-movimiento","d"],{"children":["__PAGE__",{},[["$L1","$L2",null],null],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children","$4","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/75d241a800c6b66c.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"es","className":"__variable_bb2e19","children":["$","body",null,{"className":"min-h-screen bg-fondo font-mono text-crema antialiased","children":["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":"404"}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],"notFoundStyles":[]}]}]}]],null],null],["$L6",null]]]]
+6:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"charSet":"utf-8"}],["$","title","2",{"children":"Ojos que no ven... — MILPA"}],["$","meta","3",{"name":"description","content":"Rejilla dibujada con bucles anidados: cada celda tiene un círculo en trayectoria circular (cos/sin) y una elipse cuyo verde se modula con ruido Perlin. El fondo no se limpia, por lo que el movimiento deja rastros que tejen una textura tipo campo."}],["$","link","4",{"rel":"icon","href":"/icon.svg?e5bdd04178928d30","type":"image/svg+xml","sizes":"any"}]]
+1:null
+7:I[9999,["648","static/chunks/648-a963bf0325acd59f.js","248","static/chunks/248-87227d3e7607ded8.js","935","static/chunks/app/sketch/%5Bslug%5D/page-10191fcad86abb1b.js"],"default"]
+8:T5d0,  let separacion, x,y,ref, nZ, xVar;
+
+  function setup() {
+    createCanvas(400, 400).parent("sketch-container");
+    background(0);
+    // Separacion entre los circulos
+    separacion = 40;
+    // posicion del primer circulo de la matriz(superior izquierda)
+    x = separacion;
+    y = separacion;
+    xVar = 0;
+    ref = 0;
+    
+    nZ = random(100);
+    frameRate(30);  
+  }
+
+  function draw() {
+    // background(0);
+    
+    for(let j = 0; j < (height - separacion*1.5); j += separacion*2){
+      for(let i = 0; i < (width - separacion*1.5); i += separacion*2){
+        // Instrucciones de dibujo
+        
+        // Hace un circulo blanco
+        noStroke();
+        fill(255);
+        // Cada que se repite el codigo se modifica la posicion en 'x' y 'y', en trayectoria circular
+        // ellipse(x, y, 15);      
+        // ellipse(x + i, y + j, 15);      
+        ellipse(x + i + 20*Math.cos(ref), y + j + 20*Math.sin(ref), 15);      
+        
+        // Hace un ellipse 
+        noStroke();
+        // fill(255*noise(nZ));
+        fill(50,255*noise(nZ),0);
+        
+        nZ += .05;
+        // ellipse(x,y,10,5);
+        // ellipse(x + i - 10*cos(ref), y + j,10,5); 
+        // ellipse(x + i, y + j - 10*sin(ref),10,5); 
+        ellipse(x + i - 10*Math.cos(ref), y + j - 10*Math.sin(ref),10,5);   
+        
+        // aumento de la variable para posicion circular
+        ref += 0.01;  
+        
+      }
+      
+    }
+    
+  }2:["$","$L7",null,{"slug":"rejilla-movimiento","code":"$8"}]

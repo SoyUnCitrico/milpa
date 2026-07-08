@@ -1,23 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import P5Sketch from "./P5Sketch";
 import SketchInfo from "./SketchInfo";
 import CodeBlock from "./CodeBlock";
-import { sketches, getSketch } from "@/lib/sketches";
+import Header from "./Header";
+import NavPanel from "./NavPanel";
+import { getSketch } from "@/lib/sketches";
 import { sourceUrl } from "@/lib/config";
 
 /**
  * Vista de detalle de un sketch:
- *  - barra superior con dos botones para ocultar/mostrar cada panel,
- *  - barra de navegación a la izquierda (arriba en mobile): home + sketches,
+ *  - barra superior (Header) con dos botones para ocultar/mostrar cada panel,
+ *  - NavPanel: overlay con sketches (se despliega desde el header, no resta
+ *    ancho al resto del layout),
  *  - canvas en grande al centro + info,
  *  - barra de código original a la derecha (abajo en mobile) con enlace a GitHub.
  *
- * Layout responsivo: un único flex en orden [nav, main, código] que es
- * `flex-col` en mobile (nav arriba, código abajo) y `flex-row` en desktop
- * (nav izquierda, código derecha).
+ * Layout responsivo del cuerpo (canvas + código): `flex-col` en mobile
+ * (código abajo) y `flex-row` en desktop (código a la derecha).
  *
  * Recibe solo `slug` y `code` (strings); la factory se resuelve del registro en
  * el cliente porque las funciones no cruzan el límite Server → Client.
@@ -38,83 +39,17 @@ export default function SketchDetail({
 
   return (
     <div className="flex min-h-screen flex-col">
-      {/* Barra superior */}
-      <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-crema/10 bg-fondo/95 px-3 py-2 backdrop-blur">
-        <button
-          onClick={() => setShowNav((v) => !v)}
-          aria-label={showNav ? "Ocultar navegación" : "Mostrar navegación"}
-          aria-pressed={showNav}
-          className={`rounded-md border px-2 py-1.5 transition ${
-            showNav
-              ? "border-acento/50 text-acento"
-              : "border-crema/20 text-crema/60 hover:text-crema"
-          }`}
-        >
-          <PanelLeftIcon />
-        </button>
+      <Header
+        showNav={showNav}
+        onToggleNav={() => setShowNav((v) => !v)}
+        title={meta.title}
+        showCode={showCode}
+        onToggleCode={() => setShowCode((v) => !v)}
+      />
+      <NavPanel currentSlug={slug} open={showNav} />
 
-        <Link
-          href="/"
-          className="truncate text-sm text-crema/70 transition hover:text-crema"
-        >
-          MILPA
-        </Link>
-        <span className="text-crema/30">/</span>
-        <h1 className="truncate text-sm font-semibold text-crema">
-          {meta.title}
-        </h1>
-
-        <button
-          onClick={() => setShowCode((v) => !v)}
-          aria-label={showCode ? "Ocultar código" : "Mostrar código"}
-          aria-pressed={showCode}
-          className={`ml-auto rounded-md border px-2 py-1.5 transition ${
-            showCode
-              ? "border-acento/50 text-acento"
-              : "border-crema/20 text-crema/60 hover:text-crema"
-          }`}
-        >
-          <CodeIcon />
-        </button>
-      </header>
-
-      {/* Cuerpo: nav | canvas | código */}
+      {/* Cuerpo: canvas | código (el nav ahora es overlay, no resta ancho) */}
       <div className="flex flex-1 flex-col lg:flex-row">
-        {/* Navegación */}
-        {showNav && (
-          <nav className="shrink-0 border-b border-crema/10 bg-panel/30 p-4 lg:w-60 lg:border-b-0 lg:border-r">
-            <Link
-              href="/"
-              className="mb-4 inline-flex items-center gap-2 text-sm text-crema/70 transition hover:text-crema"
-            >
-              ← Galería
-            </Link>
-            <h2 className="mb-2 text-xs uppercase tracking-wider text-crema/40">
-              Sketches
-            </h2>
-            <ul className="flex flex-col gap-1">
-              {sketches.map((e) => {
-                const active = e.meta.slug === slug;
-                return (
-                  <li key={e.meta.slug}>
-                    <Link
-                      href={`/sketch/${e.meta.slug}`}
-                      aria-current={active ? "page" : undefined}
-                      className={`block rounded-md px-3 py-2 text-sm transition ${
-                        active
-                          ? "bg-acento/15 text-acento"
-                          : "text-crema/75 hover:bg-crema/5 hover:text-crema"
-                      }`}
-                    >
-                      {e.meta.title}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
-        )}
-
         {/* Canvas grande + info */}
         <main className="flex min-w-0 flex-1 flex-col gap-6 p-4 sm:p-6">
           <div className="mx-auto w-full max-w-3xl">
@@ -154,24 +89,6 @@ export default function SketchDetail({
         )}
       </div>
     </div>
-  );
-}
-
-function PanelLeftIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="2" />
-      <line x1="9" y1="4" x2="9" y2="20" stroke="currentColor" strokeWidth="2" />
-    </svg>
-  );
-}
-
-function CodeIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <polyline points="16 18 22 12 16 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <polyline points="8 6 2 12 8 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
   );
 }
 

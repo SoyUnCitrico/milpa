@@ -1,0 +1,147 @@
+3:I[4707,[],""]
+5:I[6423,[],""]
+4:["slug","girasol","d"]
+0:["qf_zfFTdvPInMAMZjIJfX",[[["",{"children":["sketch",{"children":[["slug","girasol","d"],{"children":["__PAGE__?{\"slug\":\"girasol\"}",{}]}]}]},"$undefined","$undefined",true],["",{"children":["sketch",{"children":[["slug","girasol","d"],{"children":["__PAGE__",{},[["$L1","$L2",null],null],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children","$4","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/75d241a800c6b66c.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"es","className":"__variable_bb2e19","children":["$","body",null,{"className":"min-h-screen bg-fondo font-mono text-crema antialiased","children":["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":"404"}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],"notFoundStyles":[]}]}]}]],null],null],["$L6",null]]]]
+6:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"charSet":"utf-8"}],["$","title","2",{"children":"Girasol — MILPA"}],["$","meta","3",{"name":"description","content":"Girasol estático compuesto por cuatro espirales de partículas (centro, dos coronas de semillas y pétalos) sobre un cielo azul. Estudio de composición polar; reusa la biblioteca Spiral y se detiene con noLoop() tras el primer frame."}],["$","link","4",{"rel":"icon","href":"/icon.svg?e5bdd04178928d30","type":"image/svg+xml","sizes":"any"}]]
+1:null
+7:I[9999,["648","static/chunks/648-a963bf0325acd59f.js","248","static/chunks/248-87227d3e7607ded8.js","935","static/chunks/app/sketch/%5Bslug%5D/page-10191fcad86abb1b.js"],"default"]
+8:T10c7,const sfColor1 = '#824B27'
+const sfColor2 = '#0E060F'
+const sfColor3 = '#C86D18'
+const sfColor4 = '#E7A014'
+const skyColor = '#92B6E4'
+
+const numParticulas_1 = 400;
+const numParticulas_2 = 100;
+const numParticulas_3 = 800;
+const numParticulas_4 = 25;
+
+let playing = false;
+let living = false;
+
+let sf_centro1 = [];
+let sf_centro2 = [];
+let sf_centro3 = [];
+let sf_petalos = [];
+
+function setup() {
+    createCanvas(1254, 1254).parent('mainContainer');
+    background(skyColor);
+    // push();
+    // noStroke();
+    // fill(sfColor2);
+    // ellipse(width/2, height/2, 1254, 1254);
+
+    // fill(sfColor3);
+    // ellipse(width/2, height/2, 532, 532);
+
+    // fill(sfColor2);
+    // ellipse(width/2, height/2, 368, 352);
+
+    // fill(sfColor1);
+    // ellipse(width/2, height/2, 252, 228);
+    // pop();
+
+    sf_centro1 = [...setSpiral(9.01, 0, 252, 252*3.1, numParticulas_1, 4, 0, 'square', sfColor1)];
+    sf_centro2 = [...setSpiral(3.115, 125, 364, (368-252) * 4.2, numParticulas_2, 10, 1, 'circle', sfColor2)];
+    sf_centro3 = [...setSpiral(32.3, 170, 700, (532) * 8, numParticulas_3, 4 , 2 , 'circle', sfColor3)];
+    sf_petalos = [...setSpiral(1, 400, 400, 2, numParticulas_4, 20 , 0, 'square', sfColor4)];
+    
+
+}
+
+function draw() {
+  for (var i = 0; i < sf_centro1.length; i++) {    
+    //sf_centro1[i].follow(newDirections[i]); 
+    // if(playing) {
+    //   sf_centro1[i].update();
+    // }
+    // if(living) {
+    //   sf_centro1[i].updateRgb();
+    //   if (sf_centro1[i].finished()) {
+    //     sf_centro1.splice(i, 0);
+    //   }
+    // }
+    // sf_centro1[i].edges();
+    sf_centro1[i].show(sf_centro1[i].type);
+    
+  }
+
+  for (var i = 0; i < sf_centro2.length; i++) {    
+    //sf_centro1[i].follow(newDirections[i]); 
+    // if(playing) {
+    //   sf_centro2[i].update();
+    // }
+    // if(living) {
+    //   sf_centro2[i].updateRgb();
+
+    //   if (sf_centro2[i].finished()) {
+    //     sf_centro2.splice(i, 0);
+    //   }
+    // }
+    // sf_centro2[i].edges();
+    sf_centro2[i].show(sf_centro2[i].type);
+  }
+
+  for (var i = 0; i < sf_centro3.length; i++) {    
+    //sf_centro3[i].follow(newDirections[i]); 
+    // if(playing) {
+    //   sf_centro3[i].update();
+    // }
+    // if(living) {
+    //   sf_centro3[i].updateRgb();
+
+    //   if (sf_centro3[i].finished()) {
+    //     sf_centro3.splice(i, 0);
+    //   }
+    // }
+    // sf_centro3[i].edges();
+    sf_centro3[i].show(sf_centro3[i].type);
+  }
+
+  for (var i = 0; i < sf_petalos.length; i++) {    
+    //sf_petalos[i].follow(newDirections[i]); 
+    // if(playing) {
+    //   sf_petalos[i].update();
+    // }
+    // if(living) {
+    //   sf_petalos[i].updateRgb();
+
+    //   if (sf_petalos[i].finished()) {
+    //     sf_petalos.splice(i, 0);
+    //   }
+    // }
+    // sf_petalos[i].edges();
+    sf_petalos[i].show(sf_petalos[i].type);
+  }
+  //updateSpiral()
+}
+
+function setSpiral(ciclos = 1, radioInt = 10, radioExt = 100, stepsRadio = 200, totalParticles = 100, particleSize = 5, particleStroke = 2, particleType = 'circle', particleColor = '#000000') {
+  const spiral = [];
+  for(var i = 0; i < totalParticles; i++) {
+      let angleIncrement = 360 / totalParticles * ciclos;
+      let angle = TWO_PI / 360 * (angleIncrement * i);
+      let actualRadio = ((radioExt - radioInt) * i / stepsRadio) + radioInt;
+      let xPos = actualRadio * sin(angle) + width / 2;
+      let yPos = actualRadio * cos(angle) + height / 2; 
+      const newPos = createVector(xPos, yPos);
+      const newParticle = new Particle(newPos, particleSize, particleStroke, particleType, particleColor, angle);
+      spiral.push(newParticle);
+  }
+  return spiral;
+}
+
+function updateSpiral(spiralArray, ciclos = 1, radioInt = 10, radioExt = 100, stepsRadio = 200) {
+  for(var i = 0; i < spiralArray.length; i++){
+    let angleIncrement = 360 / spiralArray.length * ciclos;
+    let angle = TWO_PI / 360 * (angleIncrement * i);
+    let actualRadio = ((radioExt - radioInt) * i / stepsRadio) + radioInt;
+    let xPos = actualRadio * sin(angle) + width / 2;
+    let yPos = actualRadio * cos(angle) + height / 2; 
+
+    const newPos = createVector(xPos, yPos);
+    spiralArray[i].setPosition(newPos);
+
+  }
+}2:["$","$L7",null,{"slug":"girasol","code":"$8"}]

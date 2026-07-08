@@ -1,0 +1,154 @@
+3:I[4707,[],""]
+5:I[6423,[],""]
+4:["slug","rev3","d"]
+0:["qf_zfFTdvPInMAMZjIJfX",[[["",{"children":["sketch",{"children":[["slug","rev3","d"],{"children":["__PAGE__?{\"slug\":\"rev3\"}",{}]}]}]},"$undefined","$undefined",true],["",{"children":["sketch",{"children":[["slug","rev3","d"],{"children":["__PAGE__",{},[["$L1","$L2",null],null],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children","$4","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/75d241a800c6b66c.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"es","className":"__variable_bb2e19","children":["$","body",null,{"className":"min-h-screen bg-fondo font-mono text-crema antialiased","children":["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":"404"}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],"notFoundStyles":[]}]}]}]],null],null],["$L6",null]]]]
+6:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"charSet":"utf-8"}],["$","title","2",{"children":"Revolution III — MILPA"}],["$","meta","3",{"name":"description","content":"Pieza de timeline (≈30 s) por millis(): un atardecer de círculos concéntricos da paso a un rayo de luz y a un relieve trazado con ruido, y se detiene con noLoop(). Composición vertical."}],["$","link","4",{"rel":"icon","href":"/icon.svg?e5bdd04178928d30","type":"image/svg+xml","sizes":"any"}]]
+1:null
+7:I[9999,["648","static/chunks/648-a963bf0325acd59f.js","248","static/chunks/248-87227d3e7607ded8.js","935","static/chunks/app/sketch/%5Bslug%5D/page-10191fcad86abb1b.js"],"default"]
+8:Td2d,let w = 800;
+let h = 1000;
+
+let ns;
+// let nsStep = 0.04;
+let nsStep = 0.009;
+let duration = 30000;
+
+let verde1, verde2, verde3;
+let vino1, vino2, vino3;
+let frame = 0;
+let startMillis;
+let fps = 15;
+let capturer = new CCapture({
+  format: 'png',
+  framerate: fps
+});
+
+function setup() {
+    createCanvas(w, h);
+    colorMode(HSB, 360, 100, 100, 100);   
+    ellipseMode(CENTER) 
+    rectMode(CORNERS)
+    frameRate(fps);
+    verde1 = color(88,22,100);
+    verde2 = color(75,100,100);
+    verde3 = color(80,88,80);
+    
+    vino1 = color(339,82,81);
+    vino2 = color(332,78,64);
+    vino3 = color(290,59,31);
+
+    ns = random(100);
+    // background(vino3);
+    background(0);
+    smooth();
+}
+
+function draw() {
+    if (frame === 0) {
+
+        // los objetos captures se usan para guardar el canvas 
+        // durante cada frame de animación, activar en caso de 
+        // querer guardar las imagenes. Los frames pueden unirse
+        // rapidamente con 'ffmpeg' mediante terminal para formar
+        // un video
+        // capturer.start();
+        
+        startMillis = millis();
+        frame ++;   
+    }
+    // let duration = 120000;
+    let elapsed = millis() - startMillis;
+    let t = map(elapsed, 0, duration, 0, 1);
+    console.log(t);
+
+    
+    if(t <= 1) {
+        sunset(t);
+    } else if(t > 1 && t <= 1.03125) {
+        
+        ligtRay(t, w*.55, ns);
+        ns += nsStep;
+    } else if(t > 1.5 && t <= 2) {
+        relieve(t, w*.3, w*.75, ns);
+        ns += nsStep;
+    } else if(t > 2) {
+        noLoop();
+        console.log('Finalizando');
+        // capturer.stop();
+        // capturer.save();
+        return;
+
+    }
+       
+    // capturer.capture(document.getElementById('defaultCanvas0'));
+
+}
+
+function relieve(tiempo, radioInt, radioExt, ruido) {
+    push();
+    translate(w/2, h*2/3);
+    strokeWeight(1);
+
+    let x = radioExt * cos(TWO_PI * tiempo);
+    let y = radioExt * -sin(TWO_PI * tiempo);
+    let a = radioInt * cos(TWO_PI * tiempo);
+    let b = - radioInt * noise(ruido) * -sin(TWO_PI * tiempo); 
+    console.log(b);
+    let mt,br,st;
+    mt = hue(vino2);
+    br = brightness(vino2);
+    br = br * noise(ruido);
+    st = saturation(vino2);
+    st = st * noise(ruido);
+    vino2.setAlpha(noise(ruido) * 90 + 10);
+    stroke(mt,br,st);
+    line(a,b, x, y);
+    pop();
+}
+
+function ligtRay(tiempo, radioExt, ruido){
+    push();
+    translate(w/2, h*2/3);
+    strokeWeight(1);
+
+    let x = radioExt * cos(PI * 64 * tiempo);
+    let y = radioExt * -sin(PI * 64 * tiempo);
+
+    vino2.setAlpha(noise(ruido) * 30 + 10);
+    stroke(verde2);
+    line(0,0, x, y);
+    pop();
+}
+function sunset(tiempo) {
+    push();
+    translate(w/2,h*2/3);
+    noFill();
+    strokeWeight(1);
+    // stroke(255,(255-255*log(tiempo)));
+    verde1.setAlpha(40-pow(40,tiempo));
+    noFill();
+    stroke(verde1);
+    ellipse(0,0,w*tiempo, w*tiempo);
+    
+    let alpha = tiempo * 1.72
+    vino3.setAlpha(100*log(1 + alpha));
+    stroke(vino3);
+    strokeWeight(2);
+    ellipse(0,0,w+h*tiempo*3/4,w+h*tiempo*3/4);
+
+    translate(-w/2,0);
+    noStroke();
+    fill(0);
+    rect(0,0,w,h/3);
+    pop();
+}
+
+function keyTyped() {
+    if (key === 's') {
+        saveCanvas('rev', 'png');
+    }
+}
+
+function cuadrados() {
+    
+}2:["$","$L7",null,{"slug":"rev3","code":"$8"}]

@@ -1,0 +1,247 @@
+3:I[4707,[],""]
+5:I[6423,[],""]
+4:["slug","fft-visualization","d"]
+0:["qf_zfFTdvPInMAMZjIJfX",[[["",{"children":["sketch",{"children":[["slug","fft-visualization","d"],{"children":["__PAGE__?{\"slug\":\"fft-visualization\"}",{}]}]}]},"$undefined","$undefined",true],["",{"children":["sketch",{"children":[["slug","fft-visualization","d"],{"children":["__PAGE__",{},[["$L1","$L2",null],null],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children","$4","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/75d241a800c6b66c.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"es","className":"__variable_bb2e19","children":["$","body",null,{"className":"min-h-screen bg-fondo font-mono text-crema antialiased","children":["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":"404"}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],"notFoundStyles":[]}]}]}]],null],null],["$L6",null]]]]
+6:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"charSet":"utf-8"}],["$","title","2",{"children":"Visualización FFT — MILPA"}],["$","meta","3",{"name":"description","content":"Visualizador de audio sobre una canción: dibuja la autocorrelación de la forma de onda y un espectro de frecuencias en disposición polar, en HSB. Botones de Play/Stop/Random, sliders de volumen y velocidad, y la tecla t alterna entre la canción y el micrófono."}],["$","link","4",{"rel":"icon","href":"/icon.svg?e5bdd04178928d30","type":"image/svg+xml","sizes":"any"}]]
+1:null
+7:I[9999,["648","static/chunks/648-a963bf0325acd59f.js","248","static/chunks/248-87227d3e7607ded8.js","935","static/chunks/app/sketch/%5Bslug%5D/page-10191fcad86abb1b.js"],"default"]
+8:T15f7,let button, jumButton, stopButton;
+let sliderVol, sliderRate;
+
+let song, fft, mic;
+let bNormalize = true;
+let centerClip = false;
+
+let audioInput = false;
+let isPlaying = false;
+
+function preload(){
+  song = loadSound('../assets/js/scripts/CC2/synth.mp3');
+}
+
+
+function setup() {
+  getAudioContext().suspend();
+  let cnv = createCanvas(800,600);
+  cnv.parent('sketch-container')
+  angleMode(DEGREES);
+  colorMode(HSB);
+  rectMode(CENTER); 
+
+  // Creacion de botones 
+  button = createButton('Play / Pause');
+  button.mousePressed(toggleSong);
+  stopButton = createButton('Stop');
+  stopButton.mousePressed(alto);
+  jumpButton = createButton("Random");
+  jumpButton.mousePressed(jumpSong);
+
+  // Creacion de sliders
+  sliderVol = createSlider(0,1,0.5,0.001)
+  sliderRate = createSlider(0,2,1,0.001)
+  button.parent('sketch-info');
+  stopButton.parent('sketch-info');
+  jumpButton.parent('sketch-info');
+  sliderVol.parent('sketch-info');
+  sliderRate.parent('sketch-info');
+  
+  mic = new p5.AudioIn();
+  fft = new p5.FFT(0.6,64);
+  
+  color_back = color(191, 98, 15);
+  color_1 = color(169, 88, 55);
+  color_2 = color (169, 83, 85);
+  color_3 = color(45, 91, 95);
+  color_4 = color(39, 94, 75);
+  nZ = random(10);
+  nZstroke = random();
+  aumentoStroke = 0.3;
+  // background(0);
+  background(color_back);
+  
+}
+
+function draw() {
+  if (isPlaying) {
+    //  Actualizacion de los sliders
+    song.setVolume(sliderVol.value());
+    song.rate(sliderRate.value());  
+    ilustrar();
+  } else {
+    push();
+    background(0);
+    textSize(40);
+    noStroke();
+    fill(255);
+    textAlign(CENTER, CENTER);
+    text("Presiona el botón de play", width/2, height/2);
+    pop();
+  }
+}
+
+function infoText() {
+  push();
+  translate(0,130);
+  noStroke();
+  fill(255);
+  textAlign(CENTER,CENTER);
+  textSize(12);
+  let len = song.currentTime();
+  text("vol: " + sliderVol.value().toFixed(2).toString() ,width*.1,0);
+  text("time: " + len.toFixed(2).toString() ,width/2.7,0);
+  pop();
+}
+
+function ilustrar() {
+  background(191, 98, 15, 0.2);
+  // Correlation, dibuja las curva amarillas de la parte superior
+  let timeDomain = fft.waveform(1024, 'float32');
+  let corrBuff = autoCorrelate(timeDomain);
+  stroke(color_4);
+  noFill();
+  beginShape();
+  for (let i = 0; i < corrBuff.length; i++) {
+    let w = map(i, 0, corrBuff.length, 0, width);
+    let h = map(corrBuff[i], -1, 1, 150, 0);
+    curveVertex(w, h);
+  }
+  endShape();
+  
+  beginShape();
+  for (let i = 0; i < corrBuff.length; i++) {
+    let w = map(i, 0, corrBuff.length, width, 0);
+    let h = map(corrBuff[i], -1, 1, 150, 0);
+    curveVertex(w, h);
+  }
+  endShape();  
+  noFill();
+  translate(width/2, height*3/4);
+  
+  /////////////////// ESPECTRO DE FRECUENCIAS
+  let spectrum = fft.analyze();
+  beginShape();
+  for(let i = spectrum.length / 4; i < spectrum.length - 9; i++) {
+    let r = map(spectrum[i], 0, 255, 10, width*3/4);
+    let angle = map(i, spectrum.length / 4, spectrum.length - 9, 150, 390);
+    let x = r * cos(angle);
+    let y = r * sin(angle);
+    nZstroke = noise(nZstroke);
+    strokeWeight(3 * nZstroke);
+    stroke(color_1);
+    fill(color_2);
+    if(i >= spectrum.length/2 && i <= spectrum.length/2 + spectrum.length/16 + spectrum.length/32) {
+      // noStroke();
+      strokeWeight(5 * nZstroke);
+      stroke(45, 91, 95, 0.5);
+      point(-x,-y/3);  
+      // rect(-x,-y/2.5,r/10);  
+      stroke(color_2);
+      fill(color_1);
+    }
+    rect(x,y,r/10);
+    nZstroke += aumentoStroke;
+    }
+  fill(color_back);
+  strokeWeight(2*random());
+  stroke(color_3);
+  ellipse(0,0,map(spectrum[1],0,255,10,width/5));
+  endShape();
+  infoText();
+}
+
+function autoCorrelate(buffer) {
+  let newBuffer = [];
+  let nSamples = buffer.length;
+
+  let autocorrelation = [];
+
+  if (centerClip) {
+    let cutoff = 0.1;
+    for (let i = 0; i < buffer.length; i++) {
+      let val = buffer[i];
+      buffer[i] = Math.abs(val) > cutoff ? val : 0;
+    }
+  }
+
+  for (let lag = 0; lag < nSamples; lag++){
+    let sum = 0; 
+    for (let index = 0; index < nSamples; index++){
+      let indexLagged = index+lag;
+      if (indexLagged < nSamples){
+        let sound1 = buffer[index];
+        let sound2 = buffer[indexLagged];
+        let product = sound1 * sound2;
+        sum += product;
+      }
+    }
+
+    newBuffer[lag] = sum/nSamples;
+  }
+
+  if (bNormalize){
+    let biggestVal = 0;
+    for (let index = 0; index < nSamples; index++){
+      if (abs(newBuffer[index]) > biggestVal){
+        biggestVal = abs(newBuffer[index]);
+      }
+    }
+    for (let index = 0; index < nSamples; index++){
+      newBuffer[index] /= biggestVal;
+    }
+  }
+
+  return newBuffer;
+}
+
+// toggle input
+function keyPressed() {
+  if (key == 't') {
+    toggleInput();
+  }
+}
+
+function toggleSong() {
+  userStartAudio();
+  if(!song.isPlaying())  {
+    song.play();
+    isPlaying = true;
+  } else {
+    song.stop();
+    isPlaying = false;
+  }
+}
+
+function toggleInput() {
+  if(audioInput)  {
+    mic.start();
+    fft.setInput(mic);
+    audioInput = false;
+    print('Mic Input');
+    // audioIsPlaying = false;
+  } else {
+    mic.stop();
+    fft.setInput(song);
+    audioInput = true;
+    print('Song Input');
+  }
+}
+
+function onOff(){
+  if(song.isPlaying()){
+    song.pause();
+  } else {
+    song.play();
+  }
+}
+
+function alto(){
+  song.stop();
+  isPlaying = false;
+}
+
+function jumpSong() {
+  let len = song.duration();
+  let t = random(len);
+  song.jump(t);
+}
+2:["$","$L7",null,{"slug":"fft-visualization","code":"$8"}]

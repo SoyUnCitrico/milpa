@@ -1,0 +1,170 @@
+3:I[4707,[],""]
+5:I[6423,[],""]
+4:["slug","generativo-particulas","d"]
+0:["qf_zfFTdvPInMAMZjIJfX",[[["",{"children":["sketch",{"children":[["slug","generativo-particulas","d"],{"children":["__PAGE__?{\"slug\":\"generativo-particulas\"}",{}]}]}]},"$undefined","$undefined",true],["",{"children":["sketch",{"children":[["slug","generativo-particulas","d"],{"children":["__PAGE__",{},[["$L1","$L2",null],null],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children","$4","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/75d241a800c6b66c.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"es","className":"__variable_bb2e19","children":["$","body",null,{"className":"min-h-screen bg-fondo font-mono text-crema antialiased","children":["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":"404"}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],"notFoundStyles":[]}]}]}]],null],null],["$L6",null]]]]
+6:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"charSet":"utf-8"}],["$","title","2",{"children":"Generativo Partículas — MILPA"}],["$","meta","3",{"name":"description","content":"Campo de flujo de ruido Perlin (Coding Train): 300 partículas siguen el campo recalculado cada frame y dejan estelas de color que derivan en el tiempo y rebotan en los bordes. Reusa la biblioteca Particle extendida con el modo 'estela'."}],["$","link","4",{"rel":"icon","href":"/icon.svg?e5bdd04178928d30","type":"image/svg+xml","sizes":"any"}]]
+1:null
+7:I[9999,["648","static/chunks/648-a963bf0325acd59f.js","248","static/chunks/248-87227d3e7607ded8.js","935","static/chunks/app/sketch/%5Bslug%5D/page-10191fcad86abb1b.js"],"default"]
+8:Td54,// https://thecodingtrain.com/CodingChallenges/024-perlinnoiseflowfield.html
+
+var inc = 0.1;
+var scl = 10;
+var cols, rows;
+
+var zoff = 0;
+
+var fr;
+
+var particles = [];
+
+var flowfield;
+
+function setup() {
+  createCanvas(600, 600);
+  cols = floor(width / scl);
+  rows = floor(height / scl);
+  fr = createP('');
+
+  flowfield = new Array(cols * rows);
+
+  for (var i = 0; i < 300; i++) {
+    particles[i] = new Particle();
+  }
+  background(255);
+}
+
+function draw() {
+  //background(255);
+  var yoff = 0;
+
+  //actualiza la posicion del campo
+  for (var y = 0; y < rows; y++) {
+    var xoff = 0;
+    for (var x = 0; x < cols; x++) {
+      var index = x + y * cols;
+      var angle = noise(xoff, yoff, zoff) * TWO_PI * 4;
+      var v = p5.Vector.fromAngle(angle);
+      v.setMag(1);
+      flowfield[index] = v;
+      xoff += inc;
+      //stroke(0, 50);
+      //push();
+      //translate(x * scl, y * scl);
+      //rotate(v.heading());
+      //strokeWeight(1);
+      //line(0, 0, scl, 0);
+      //pop();
+    }
+    yoff += inc;
+
+    zoff += 0.0001;
+  }
+
+  for (var i = 0; i < particles.length; i++) {
+    particles[i].follow(flowfield);
+    particles[i].update();
+    particles[i].edges();
+    particles[i].show();
+    particles[i].updateRgb();
+    
+  if (particles[i].finished()) {
+        particles.splice(i, 0);
+      }
+  }
+  // fr.html(floor(frameRate()));
+}
+
+
+
+
+
+
+
+class Particle {
+    constructor() {
+      this.pos = createVector(random(250, 350), random(250, 350));
+      this.vel = createVector(0, 0);
+      this.acc = createVector(0, 0);
+      this.maxspeed = 4;
+      this.prevPos = this.pos.copy();
+      this.r = 0;
+      this.g = 0;
+      this.b = 255;
+      this.alpha = 255;
+      this.stroke = random(1, 5);
+    }
+  
+    finished() {
+      return this.alpha < 0;
+    }
+  
+    update() {
+      this.vel.add(this.acc);
+      this.vel.limit(this.maxspeed);
+      this.pos.add(this.vel);
+      this.acc.mult(0);
+      this.alpha -= 0.08;
+      this.r += 0.1;
+      this.g += 0.1;
+      this.b -= 0.1;
+    }
+  
+    follow(vectors) {
+      var x = floor(this.pos.x / scl);
+      var y = floor(this.pos.y / scl);
+      var index = x + y * cols;
+      var force = vectors[index];
+      this.applyForce(force);
+    }
+  
+    applyForce(force) {
+      this.acc.add(force);
+    }
+  
+    show() {
+      stroke(this.r, this.g, this.b, this.alpha);
+      strokeWeight(this.stroke);
+      line(this.pos.x, this.pos.y, this.prevPos.x, this.prevPos.y);
+      this.updatePrev();
+    }
+  
+    updateRgb() {
+      if (this.r > 10) {
+        this.r -= random(0.1, 0.2);
+      }
+      if (this.r == 0) {
+        this.r += random(0.1, 0.2);
+      }
+  
+      if (this.g > 10) {
+        this.g -= random(0.1, 0.2);
+      }
+      if (this.g == 0) {
+        this.g += random(0.1, 0.2);
+      }
+  
+      if (this.b == 0) {
+        this.b += random(0.1, 0.3);
+      }
+      if (this.b == 255) {
+        this.b -= random(0.1, 0.3);
+      }
+    }
+  
+  
+  
+    updatePrev() {
+      this.prevPos.x = this.pos.x;
+      this.prevPos.y = this.pos.y;
+    }
+  
+    edges() {
+      if (this.pos.x > width || this.pos.x < 0) {
+        this.vel.x = (-1) * this.vel.x;
+      }
+      if (this.pos.y > height || this.pos.y < 0) {
+        this.vel.y = (-1) * this.vel.y;
+      }
+    }
+  
+}2:["$","$L7",null,{"slug":"generativo-particulas","code":"$8"}]

@@ -25,11 +25,11 @@ export default function MilpaPistilos() {
     TASSEL_VARIANT.iterations,
   );
   const segments = interpretTurtle(instructions, {
-    stepLength: 50,
+    stepLength: 200,
     angleDeg: TASSEL_VARIANT.angleDeg,
-    angleJitter: 10,
+    angleJitter: 25,
     startX: 0,
-    startY: 0,
+    startY: 150,
     startAngleDeg: -90,
     rng,
   });
@@ -41,19 +41,19 @@ export default function MilpaPistilos() {
   const reachX = Math.max(1, Math.max(...xs) - Math.min(...xs));
   const reachY = Math.max(1, -Math.min(...ys));
   const scale = Math.min(
-    (WIDTH * 0.8) / reachX,
+    (WIDTH) / reachX,
     (HEIGHT - BOTTOM_MARGIN) / reachY,
     1.5,
   );
 
-  const anchorX = WIDTH / 2;
+  const anchorX = WIDTH / 2 + 20;
   const anchorY = HEIGHT - BOTTOM_MARGIN;
   const maxDepth = segments.reduce((max, s) => Math.max(max, s.depth), 1);
 
   return (
     <MilpaReveal
       variant="grow"
-      className="pointer-events-none relative z-10 mx-auto -mb-4 flex justify-center"
+      className="pointer-events-none relative z-10 mx-auto -mb-4 hidden justify-center sm:flex"
     >
       <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-32 w-36" aria-hidden>
         <g transform={`translate(${round2(anchorX)} ${round2(anchorY)}) scale(${round2(scale)})`}>
@@ -65,7 +65,7 @@ export default function MilpaPistilos() {
               x2={round2(seg.to.x)}
               y2={round2(seg.to.y)}
               stroke={lerpHexColor(COLOR_BASE, COLOR_TIP, seg.depth / maxDepth)}
-              strokeWidth={round2(Math.max(0.5, 2 - seg.depth * 0.4))}
+              strokeWidth={round2(Math.max(0.5, 25 - seg.depth * 0.4))}
               strokeLinecap="round"
             />
           ))}

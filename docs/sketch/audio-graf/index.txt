@@ -1,0 +1,192 @@
+3:I[4707,[],""]
+5:I[6423,[],""]
+4:["slug","audio-graf","d"]
+0:["qf_zfFTdvPInMAMZjIJfX",[[["",{"children":["sketch",{"children":[["slug","audio-graf","d"],{"children":["__PAGE__?{\"slug\":\"audio-graf\"}",{}]}]}]},"$undefined","$undefined",true],["",{"children":["sketch",{"children":[["slug","audio-graf","d"],{"children":["__PAGE__",{},[["$L1","$L2",null],null],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children","$4","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/75d241a800c6b66c.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"es","className":"__variable_bb2e19","children":["$","body",null,{"className":"min-h-screen bg-fondo font-mono text-crema antialiased","children":["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":"404"}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],"notFoundStyles":[]}]}]}]],null],null],["$L6",null]]]]
+6:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"charSet":"utf-8"}],["$","title","2",{"children":"Audio Graf — MILPA"}],["$","meta","3",{"name":"description","content":"Generador y analizador de audio: un oscilador controlado por sliders de frecuencia (escala logarítmica) y volumen, con su espectro FFT y forma de onda dibujados en tiempo real. Requiere activar el audio."}],["$","link","4",{"rel":"icon","href":"/icon.svg?e5bdd04178928d30","type":"image/svg+xml","sizes":"any"}]]
+1:null
+7:I[9999,["648","static/chunks/648-a963bf0325acd59f.js","248","static/chunks/248-87227d3e7607ded8.js","935","static/chunks/app/sketch/%5Bslug%5D/page-10191fcad86abb1b.js"],"default"]
+8:T10e6,let osc1, fft;
+let sliderFreq;
+let sliderVol;
+let isLog;
+let textColor;
+var bNormalize = true;
+var centerClip = false;
+
+function setup()
+{
+  createCanvas(windowWidth, windowHeight);
+  fill(255);
+  colorMode(HSB);
+  sliderFreq = createSlider(0,800,0,0.1);
+  sliderFreq.style('width: 794px');
+  sliderFreq.position(0,0);
+
+  sliderVol = createSlider(0,1,0,0.01);
+  sliderVol.style('width: 392px');
+  sliderVol.style('transform: rotate(270deg)');
+  sliderVol.position(width-205,  height*3 /9 );
+  
+  osc1 = new p5.Oscillator();
+  osc1.setType('sine');
+  isLog = true;
+
+  
+  osc1.freq(sliderFreq.value())
+  osc1.amp(sliderVol.value());
+  osc1.start();
+  
+  fft = new p5.FFT();
+  textColor = color(160,255,80);
+}
+
+function draw()
+{
+  background(0);
+  
+  // Sliders
+  let freq = logslider(sliderFreq.value(), 0,800,20,20000);
+  let vol = sliderVol.value();
+  osc1.freq(freq);
+  osc1.amp(vol);
+
+  // Texto de informacion
+  noStroke();
+  fill(textColor);
+  text('Oscilador: ' + osc1.getType(),width/5,50);
+  text(freq + '  Hz',width*2/5, 50);
+  text(vol + ' vol', width*3/5, 50);  
+  
+  // Espectro de frecuencias
+  let spectrum = fft.analyze(1024);
+  noStroke();
+  for (let i = 0; i< spectrum.length; i++){
+    let c = map(i,0, spectrum.length, 0,255)
+    fill(c,255,255); //remove stroke(255);
+
+    if(isLog) {
+      let a = map(log(i), 0, log(spectrum.length), 0, width) 
+      let b = map(spectrum[i], 0, 255, 0, height/3)
+      rect(a, height, width / spectrum.length, -b)
+      fill(textColor);
+      text('LOG',width*3/4,50);
+
+    } else {
+      let a = map(i, 0, spectrum.length, 0, width);
+      let b = map(spectrum[i], 0, 255, 0,height/3);
+      rect(a, height, width / spectrum.length, -b )
+      fill(textColor);
+      text('LIN',width*3/4,50);
+    } 
+    
+    
+    
+  }
+  
+  // Forma de onda en el tiempo
+  let waveform = fft.waveform(1024, 'float32');
+  noFill();
+  beginShape();
+  stroke(100,255,255);
+  for (let i = 0; i < waveform.length; i++){
+    let x = map(i, 0, waveform.length, 0, width);
+    let y = map( waveform[i], -1, 1, height/3, height*2/3);
+    vertex(x,y);
+  }
+  endShape();
+
+
+  // let corrBuff = autoCorrelate(waveform);
+  // beginShape();
+  // stroke(180,255,255);
+  // for (let i = 0; i < corrBuff.length; i++) {
+  //   let w = map(i, 0, corrBuff.length, 0, width);
+  //   let h = map(corrBuff[i], -1, 1, height/3, 0);
+  //   curveVertex(w, h);
+  // }
+  // endShape();
+
+  
+}
+
+function keyPressed() {
+  if(key == '1')
+    osc1.setType('sine');
+  if(key == '2')
+    osc1.setType('triangle');
+  if(key == '3')
+    osc1.setType('square');
+  if(key == '4')
+  osc1.setType('sawtooth');
+  if(key == 'p') {
+    osc1.start();
+    osc1.amp(sliderVol.value(),2);
+  }
+  if(key == 's') {
+    osc1.amp(0,2);
+    osc1.stop();
+  }
+
+  if(key == 'l')
+    isLog =! isLog;
+    print(isLog);
+}
+
+function logslider(position, min ,max, minLog, maxLog) {
+  var minp = min;
+  var maxp = max;
+  var minv = Math.log(minLog);
+  var maxv = Math.log(maxLog);
+  var scale = (maxv-minv) / (maxp-minp);
+
+  return Math.exp(minv + scale*(position-minp));
+}
+
+
+function autoCorrelate(buffer) {
+  var newBuffer = [];
+  var nSamples = buffer.length;
+
+  var autocorrelation = [];
+
+  // center clip removes any samples under 0.1
+  if (centerClip) {
+    var cutoff = 0.1;
+    for (var i = 0; i < buffer.length; i++) {
+      var val = buffer[i];
+      buffer[i] = Math.abs(val) > cutoff ? val : 0;
+    }
+  }
+
+  for (var lag = 0; lag < nSamples; lag++){
+    var sum = 0; 
+    for (var index = 0; index < nSamples; index++){
+      var indexLagged = index+lag;
+      if (indexLagged < nSamples){
+        var sound1 = buffer[index];
+        var sound2 = buffer[indexLagged];
+        var product = sound1 * sound2;
+        sum += product;
+      }
+    }
+
+    // average to a value between -1 and 1
+    newBuffer[lag] = sum/nSamples;
+  }
+
+  if (bNormalize){
+    var biggestVal = 0;
+    for (var index = 0; index < nSamples; index++){
+      if (abs(newBuffer[index]) > biggestVal){
+        biggestVal = abs(newBuffer[index]);
+      }
+    }
+    for (var index = 0; index < nSamples; index++){
+      newBuffer[index] /= biggestVal;
+    }
+  }
+
+  return newBuffer;
+}
+
+  2:["$","$L7",null,{"slug":"audio-graf","code":"$8"}]
