@@ -24,7 +24,7 @@ export default function NavPanel({
     >
       <div className="p-4 lg:w-72">
         <a
-          href="https://emm3.xyz"
+          href="https://www.emm3.xyz"
           target="_blank"
           rel="noopener noreferrer"
           className="mb-4 inline-flex items-center gap-2 text-sm text-crema/70 transition hover:text-crema"
