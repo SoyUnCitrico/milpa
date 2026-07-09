@@ -14,6 +14,8 @@ const PAD = 112; // margen para el grosor del trazo y el overshoot de la curva d
 // matrix.dim -> matrix.text (ver tailwind.config.ts).
 const COLOR_BASE = "#00b341";
 const COLOR_TIP = "#7fffa8";
+const COLOR_BASE2 = "#104925";
+const COLOR_TIP2 = "#7fffa8";
 
 function rotatePoint(p: Point, angleRad: number, pivot: Point): Point {
   const dx = p.x - pivot.x;
@@ -55,7 +57,23 @@ export default function MilpaHoja({
     maxSegments: 240,
   });
 
+    const segments2 = generateLeaf({
+    width: REACH,
+    height: VIEW_H,
+    seed,
+    rootPoints: [{ x: 0, y: rootY }],
+    // Región mucho más ancha que la altura (el alto se mantiene fijo) — sin
+    // agrandar el radio de atracción proporcionalmente, el crecimiento se
+    // agota en la mitad ancha del centro y nunca alcanza la punta lejana.
+    numAttractors: 200,
+    attractionDist: 100,
+    killDist: 20,
+    segLength:30,
+    maxSegments: 240,
+  });
+
   if (segments.length === 0) return null;
+  if (segments2.length === 0) return null;
 
   // "right" = la hoja vive en la mitad derecha de la fila → el tallo queda
   // a su izquierda → se ancla al borde izquierdo y crece hacia +x (derecha,
@@ -84,12 +102,20 @@ export default function MilpaHoja({
     depth: s.depth,
   }));
 
-  const maxDepth = finalSegments.reduce((max, s) => Math.max(max, s.depth), 1);
+    const finalSegments2: Segment[] = segments2.map((s) => ({
+    from: toFinal(s.from),
+    to: toFinal(s.to),
+    depth: s.depth,
+  }));
 
+  const maxDepth = finalSegments.reduce((max, s) => Math.max(max, s.depth), 1);
+  const maxDepth2 = finalSegments2.reduce((max, s) => Math.max(max, s.depth), 1);
   // Silueta de la hoja: casco convexo de los puntos más externos de la
   // venación (ya en coordenadas finales), suavizado.
   const hull = convexHull(finalSegments.flatMap((s) => [s.from, s.to]));
+  const hull2 = convexHull(finalSegments2.flatMap((s) => [s.from, s.to]));
   const outlineD = hull.length >= 3 ? smoothClosedPath(hull) : "";
+  const outlineD2 = hull2.length >= 3 ? smoothClosedPath(hull2) : "";
 
   // viewBox exacto: bounding box real de todos los puntos finales + margen.
   const xs = finalSegments.flatMap((s) => [s.from.x, s.to.x]);
@@ -99,6 +125,15 @@ export default function MilpaHoja({
   const boxW = Math.max(...xs) - Math.min(...xs) + PAD * 2;
   const boxH = Math.max(...ys) - Math.min(...ys) + PAD * 2;
 
+  const xs2 = finalSegments2.flatMap((s) => [s.from.x, s.to.x]);
+  const ys2 = finalSegments2.flatMap((s) => [s.from.y, s.to.y]);
+  const minX2 = Math.min(...xs2) - PAD;
+  const minY2 = Math.min(...ys2) - PAD;
+  const boxW2 = Math.max(...xs2) - Math.min(...xs2) + PAD * 2;
+  const boxH2 = Math.max(...ys2) - Math.min(...ys2) + PAD * 2;
+
+  const angleLeaf = Math.ceil(Math.random() * 25);
+  const angleCss = side === "left" ? `rotate-[-45deg] -mx-6 mt-10` : 'rotate-[45deg] mx-12 mt-8';
   return (
     <MilpaReveal variant="grow" className="pointer-events-none">
       <svg
@@ -125,6 +160,35 @@ export default function MilpaHoja({
             x2={round2(seg.to.x)}
             y2={round2(seg.to.y)}
             stroke={lerpHexColor(COLOR_BASE, COLOR_TIP, seg.depth / maxDepth)}
+            strokeWidth={round2(Math.max(0.4, 3.8 - seg.depth * 0.035))}
+            strokeLinecap="round"
+          />
+        ))}
+      </svg>
+      <svg
+        viewBox={`${round2(minX2)} ${round2(minY2)} ${round2(boxW2)} ${round2(boxH2)}`}
+        className={`h-32 w-full scale-[2.5] sm:h-36  ${angleCss}`}
+        aria-hidden
+      >
+        {outlineD2 && (
+          <path
+            d={outlineD2}
+            fill={COLOR_BASE2}
+            fillOpacity={0.12}
+            stroke={COLOR_BASE2}
+            strokeOpacity={0.55}
+            strokeWidth={4}
+            strokeLinejoin="round"
+          />
+        )}
+        {finalSegments2.map((seg, i) => (
+          <line
+            key={i}
+            x1={round2(seg.from.x)}
+            y1={round2(seg.from.y)}
+            x2={round2(seg.to.x)}
+            y2={round2(seg.to.y)}
+            stroke={lerpHexColor(COLOR_BASE2, COLOR_TIP2, seg.depth / maxDepth2)}
             strokeWidth={round2(Math.max(0.4, 3.8 - seg.depth * 0.035))}
             strokeLinecap="round"
           />

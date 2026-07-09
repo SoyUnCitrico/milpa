@@ -33,6 +33,7 @@ import { delay3 } from "./delay3";
 import { spectografo } from "./spectografo";
 import { audioGraf } from "./audioGraf";
 import { synth } from "./synth";
+import { atomosPixel } from "./atomosPixel";
 
 
 const baseImage = "https://amazons3-images-micel10.s3.us-east-2.amazonaws.com/images/gallery/";
@@ -675,6 +676,30 @@ export const sketches: SketchEntry[] = [
       height: 800,
     },
     factory: mallaArmonica,
+  },
+    {
+    meta: {
+      slug: "atomos-pixel",
+      title: "Átomos de Píxel",
+      author: "emm3",
+      source: "pixelAtomProject/pixelAtomProject.pde",
+      image: `${baseImage}atomos-pixel.png`,
+      description: "Port a p5 del sketch de Processing pixelAtomProject: captura una imagen (webcam o archivo), la descompone en partículas de color que conservan el píxel original y las anima con 15 modos —steering behaviors (seguir, deambular, manada, vórtice, explosión), composiciones generativas (líneas, círculos, rectángulos, hue-shift) y colonización de espacios— sobre 7 tipos de flow field con transiciones suaves, 9 formas de partícula (incluido ASCII/Matrix) y estelas/mezcla aditiva. Sin el control OSC del original.",
+      tags: ["partículas", "steering", "webcam", "flow field", "ASCII", "interactivo"],
+      controls: [
+        { key: "1–9 / 0", action: "Modos: original, mouse, campo, deambular, lluvia, temblor, manada, vórtice, explosión, gravedad." },
+        { key: "w / o / x / h / a", action: "Composiciones: líneas, círculos, rectángulos, hue-shift, colonización." },
+        { key: "d e f g q y z", action: "Campos: ruido, imagen, radial, circular, corazón, infinito, espiral." },
+        { key: "t / l / p / r", action: "Capturar / cargar imagen / play-pausa / reset." },
+        { key: "s / b / m / n / v", action: "Forma, fondo/estelas, mezcla aditiva, tamaño dinámico, vida." },
+        { key: "j k , .", action: "Tipografía: color, negrita, tamaño de letra." },
+        { key: "espacio / ← ↑ → ↓ / + − / [ ] / u i / c", action: "Explosión, dirección lluvia, velocidad, estela, umbral colonización, ver campo." },
+      ],
+      needsAudio: false,
+      width: 1280,
+      height: 720,
+    },
+    factory: atomosPixel,
   },
 ];
 

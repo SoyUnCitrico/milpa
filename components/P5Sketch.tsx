@@ -45,6 +45,11 @@ export default function P5Sketch({
   const instanceRef = useRef<p5 | undefined>(undefined);
   const [scale, setScale] = useState(1);
   const [audioReady, setAudioReady] = useState(false);
+  // Resolución lógica REAL de la pieza. Parte de las props (meta) y se adopta la
+  // del canvas tras el montaje si el sketch eligió otra en setup() (p. ej. una
+  // variante retrato en móvil). Para las piezas que crean el canvas exactamente
+  // a meta.width×height nunca cambia.
+  const [dims, setDims] = useState({ w: width, h: height });
 
   // Mide el ancho disponible y calcula la escala (cabe sin pasarse de 1:1).
   useIsomorphicLayoutEffect(() => {
@@ -52,16 +57,17 @@ export default function P5Sketch({
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
       const available = entries[0].contentRect.width;
-      setScale(Math.min(1, available / width));
+      setScale(Math.min(1, available / dims.w));
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [width]);
+  }, [dims.w]);
 
   // Monta / destruye la instancia de p5.
   useEffect(() => {
     let cancelled = false;
     setAudioReady(false);
+    setDims({ w: width, h: height });
 
     (async () => {
       const p5Module = (await import("p5")).default;
@@ -77,14 +83,35 @@ export default function P5Sketch({
         (p) => factory(p, p5Module),
         containerRef.current,
       );
+
+      // Adopta la resolución lógica real del canvas si difiere de la del meta.
+      // setup() suele correr síncrono, pero con preload se difiere: se reintenta
+      // en un rAF por si el canvas aún no existe.
+      const adoptDims = () => {
+        if (cancelled) return;
+        const inst = instanceRef.current;
+        if (!inst) return;
+        if (inst.width > 0 && (inst.width !== width || inst.height !== height)) {
+          setDims({ w: inst.width, h: inst.height });
+        } else if (!(inst.width > 0)) {
+          requestAnimationFrame(adoptDims);
+        }
+      };
+      adoptDims();
     })();
 
     return () => {
       cancelled = true;
+      // Detiene cualquier MediaStream de la pieza (createCapture): p5.remove()
+      // saca los <video> del DOM pero no apaga la cámara.
+      containerRef.current?.querySelectorAll("video").forEach((v) => {
+        const s = v.srcObject;
+        if (s instanceof MediaStream) s.getTracks().forEach((t) => t.stop());
+      });
       instanceRef.current?.remove();
       instanceRef.current = undefined;
     };
-  }, [factory, needsAudio]);
+  }, [factory, needsAudio, width, height]);
 
   const startAudio = () => {
     const instance = instanceRef.current as
@@ -98,14 +125,14 @@ export default function P5Sketch({
     <div
       ref={wrapRef}
       className={"relative w-full overflow-hidden" + (className ? ` ${className}` : "")}
-      style={{ height: height * scale }}
+      style={{ height: dims.h * scale }}
     >
       <div
         ref={containerRef}
         className="relative [&_canvas]:block"
         style={{
-          width,
-          height,
+          width: dims.w,
+          height: dims.h,
           transform: `scale(${scale})`,
           transformOrigin: "top left",
         }}

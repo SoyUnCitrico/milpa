@@ -1,9 +1,12 @@
 import GalleryHeader from "@/components/GalleryHeader";
+import MilpaFrijol from "@/components/MilpaFrijol";
 import MilpaLeaf from "@/components/MilpaLeaf";
 import MilpaHoja from "@/components/MilpaHoja";
+import MilpaMazorca from "@/components/MilpaMazorca";
 import MilpaPistilos from "@/components/MilpaPistilos";
 import MilpaRaices from "@/components/MilpaRaices";
 import SketchCard from "@/components/SketchCard";
+import { createRng } from "@/lib/milpa/random";
 import { sketches } from "@/lib/sketches";
 
 export default function Home() {
@@ -11,6 +14,19 @@ export default function Home() {
   // primeros registrados en lib/sketches/index.ts) son la base, hasta abajo;
   // los más recientes/complejos quedan arriba. Es el inverso del registro.
   const milpa = [...sketches].reverse();
+
+  // Mazorcas: brotan de nodos superiores del tallo — al azar pero
+  // determinista (semilla fija), máximo 3 y solo entre las filas del tercio
+  // superior (las primeras del DOM). Fisher-Yates parcial sobre los índices
+  // candidatos para elegir sin repetir.
+  const mazorcaRng = createRng("milpa-mazorcas");
+  const filasSuperiores = Math.max(1, Math.ceil(milpa.length / 3));
+  const candidatas = Array.from({ length: filasSuperiores }, (_, i) => i);
+  for (let i = candidatas.length - 1; i > 0; i--) {
+    const j = Math.floor(mazorcaRng() * (i + 1));
+    [candidatas[i], candidatas[j]] = [candidatas[j], candidatas[i]];
+  }
+  const filasConMazorca = new Set(candidatas.slice(0, Math.min(3, filasSuperiores)));
 
   return (
     <>
@@ -38,10 +54,9 @@ export default function Home() {
         <section className="flex flex-col gap-4">
           <MilpaPistilos />
           <div className="relative flex flex-col gap-14 lg:gap-20">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute left-1/2 top-0 z-0 h-full md:w-9 sm:w-4 -translate-x-1/2 rounded-full bg-gradient-to-b from-matrix-dim via-matrix-green to-matrix-glow shadow-glow-green"
-            />
+            {/* Tallo + enredaderas de frijol (el tallo vive dentro, entre las
+                dos capas SVG de la enredadera). */}
+            <MilpaFrijol />
             {milpa.map((entry, i) => {
               const side = i % 2 === 0 ? "left" : "right";
               const companionSide = side === "left" ? "right" : "left";
@@ -50,6 +65,11 @@ export default function Home() {
                   key={entry.meta.slug}
                   side={side}
                   companion={<MilpaHoja seed={entry.meta.slug} side={companionSide} />}
+                  extra={
+                    filasConMazorca.has(i) ? (
+                      <MilpaMazorca seed={entry.meta.slug} side={companionSide} />
+                    ) : undefined
+                  }
                 >
                   <SketchCard slug={entry.meta.slug} />
                 </MilpaLeaf>

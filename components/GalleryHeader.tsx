@@ -11,7 +11,7 @@ import NavPanel from "./NavPanel";
  * componente hoja es quien posee el toggle `showNav`.
  */
 export default function GalleryHeader() {
-  const [showNav, setShowNav] = useState(true);
+  const [showNav, setShowNav] = useState(false);
 
   return (
     <>

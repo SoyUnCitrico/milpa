@@ -32,7 +32,7 @@ export default function SketchCard({ slug }: { slug: string }) {
       href={`/sketch/${slug}`}
       className="group block rounded-2xl border border-crema/10 bg-panel/40 p-4 transition hover:border-acento/50 hover:bg-panel/60 hover:shadow-glow-orange focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-acento sm:p-6"
     >
-      <article className="flex flex-col gap-6 md:flex-row ">
+      <article className="flex flex-col gap-6 md:flex-row overflow-hidden">
         <div className="w-full md:max-w-[60%] md:flex-1">
           <div className="overflow-hidden rounded-xl bg-fondo">
             {!imgFailed ? (

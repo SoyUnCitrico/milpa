@@ -11,10 +11,13 @@ import MilpaReveal from "./MilpaReveal";
 export default function MilpaLeaf({
   children,
   companion,
+  extra,
   side,
 }: {
   children: ReactNode;
   companion?: ReactNode;
+  /** Elemento adicional anclado a la fila (p. ej. una <MilpaMazorca>); se posiciona solo. */
+  extra?: ReactNode;
   side: "left" | "right";
 }) {
   const companionSide = side === "left" ? "right" : "left";
@@ -44,6 +47,8 @@ export default function MilpaLeaf({
           {companion}
         </div>
       )}
+
+      {extra}
     </MilpaReveal>
   );
 }

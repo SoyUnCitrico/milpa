@@ -17,6 +17,8 @@ export default function MilpaRaices() {
     height: HEIGHT,
     seed: "milpa-raices",
     rootPoints: [
+      { x: WIDTH / 2 + 24, y: 0 },
+      { x: WIDTH / 2 - 24, y: 0 },
       { x: WIDTH / 2 - 18, y: 0 },
       { x: WIDTH / 2 + 18, y: 0 },
       { x: WIDTH / 2, y: 0 },
@@ -25,7 +27,7 @@ export default function MilpaRaices() {
     ],
     numAttractors: 500,
     attractionDist: 200,
-    killDist: 30,
+    killDist: 20,
     segLength: 18,
     maxSegments: 380,
   });
@@ -41,7 +43,7 @@ export default function MilpaRaices() {
         aria-hidden
       >
         {segments.map((seg, i) => {
-          const strokeWidth = round2(Math.max(0.6, 16 - seg.depth * 0.37));
+          const strokeWidth = round2(Math.max(0.8, 18 - seg.depth * 0.607));
           return (
             <line
               key={i}

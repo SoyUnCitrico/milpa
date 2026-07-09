@@ -11,6 +11,8 @@ const BOTTOM_MARGIN = -5;
 // tallo, más oscuro/café hacia las puntas de la espiga.
 const COLOR_BASE = "#ffae42";
 const COLOR_TIP = "#ff6a00";
+const COLOR_BASE2 = "#5f3d10";
+const COLOR_TIP2 = "#492a13";
 
 /**
  * Pistilos de la punta de la milpa: a diferencia de las hojas (que crecen
@@ -34,7 +36,18 @@ export default function MilpaPistilos() {
     rng,
   });
 
+  const segments2 = interpretTurtle(instructions, {
+    stepLength: 150,
+    angleDeg: TASSEL_VARIANT.angleDeg,
+    angleJitter: 45,
+    startX: -65,
+    startY: 10,
+    startAngleDeg: -90,
+    rng,
+  });
+
   if (segments.length === 0) return null;
+  if (segments2.length === 0) return null;
 
   const xs = segments.flatMap((s) => [s.from.x, s.to.x]);
   const ys = segments.flatMap((s) => [s.from.y, s.to.y]);
@@ -53,9 +66,9 @@ export default function MilpaPistilos() {
   return (
     <MilpaReveal
       variant="grow"
-      className="pointer-events-none relative z-10 mx-auto -mb-4 hidden justify-center sm:flex"
+      className="pointer-events-none relative z-10 mx-auto -mb-4 justify-center sm:flex"
     >
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-32 w-36" aria-hidden>
+      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-32 w-38" aria-hidden>
         <g transform={`translate(${round2(anchorX)} ${round2(anchorY)}) scale(${round2(scale)})`}>
           {segments.map((seg, i) => (
             <line
@@ -66,6 +79,18 @@ export default function MilpaPistilos() {
               y2={round2(seg.to.y)}
               stroke={lerpHexColor(COLOR_BASE, COLOR_TIP, seg.depth / maxDepth)}
               strokeWidth={round2(Math.max(0.5, 25 - seg.depth * 0.4))}
+              strokeLinecap="round"
+            />
+          ))}
+          {segments2.map((seg, i) => (
+            <line
+              key={i}
+              x1={round2(seg.from.x)}
+              y1={round2(seg.from.y)}
+              x2={round2(seg.to.x)}
+              y2={round2(seg.to.y)}
+              stroke={lerpHexColor(COLOR_BASE2, COLOR_TIP2, seg.depth / maxDepth)}
+              strokeWidth={round2(Math.max(0.2, 11 - seg.depth * 0.6))}
               strokeLinecap="round"
             />
           ))}

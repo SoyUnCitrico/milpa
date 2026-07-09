@@ -35,6 +35,32 @@ async function exists(p) {
   }
 }
 
+// Sketch de Processing: si el `source` es el .pde principal (su basename
+// coincide con el nombre de la carpeta, convención de Processing), el original
+// son TODOS los .pde del directorio. Se concatenan en un solo archivo
+// (principal primero, resto alfabético) para que la página de detalle los
+// muestre completos sin cambios.
+function esSketchProcessing(source) {
+  if (!source.endsWith(".pde")) return false;
+  const partes = source.split("/");
+  const base = partes[partes.length - 1].replace(/\.pde$/, "");
+  return partes.length >= 2 && partes[partes.length - 2] === base;
+}
+
+async function concatenarPde(dirOrigen, principal) {
+  const nombres = (await fs.readdir(dirOrigen))
+    .filter((n) => n.endsWith(".pde"))
+    .sort((a, b) =>
+      a === principal ? -1 : b === principal ? 1 : a.localeCompare(b),
+    );
+  const trozos = [];
+  for (const n of nombres) {
+    const contenido = await fs.readFile(path.join(dirOrigen, n), "utf8");
+    trozos.push(`// ───────────── ${n} ─────────────\n\n${contenido.trimEnd()}\n`);
+  }
+  return trozos.join("\n");
+}
+
 async function main() {
   const sources = await readSources();
   if (sources.length === 0) {
@@ -52,7 +78,13 @@ async function main() {
 
     if (await exists(from)) {
       await fs.mkdir(path.dirname(to), { recursive: true });
-      await fs.copyFile(from, to);
+      if (esSketchProcessing(source)) {
+        const principal = path.basename(from);
+        const contenido = await concatenarPde(path.dirname(from), principal);
+        await fs.writeFile(to, contenido, "utf8");
+      } else {
+        await fs.copyFile(from, to);
+      }
       copied++;
     } else if (await exists(to)) {
       kept++; // monorepo no disponible pero ya hay copia commiteada

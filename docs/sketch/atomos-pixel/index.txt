@@ -1,0 +1,3051 @@
+3:I[4707,[],""]
+5:I[6423,[],""]
+4:["slug","atomos-pixel","d"]
+0:["wyYZiAAbu8tds4PSp1fpO",[[["",{"children":["sketch",{"children":[["slug","atomos-pixel","d"],{"children":["__PAGE__?{\"slug\":\"atomos-pixel\"}",{}]}]}]},"$undefined","$undefined",true],["",{"children":["sketch",{"children":[["slug","atomos-pixel","d"],{"children":["__PAGE__",{},[["$L1","$L2",null],null],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children","$4","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/ffd065daafe2691b.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"es","className":"__variable_bb2e19","children":["$","body",null,{"className":"min-h-screen bg-fondo font-mono text-crema antialiased","children":["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":"404"}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],"notFoundStyles":[]}]}]}]],null],null],["$L6",null]]]]
+6:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"charSet":"utf-8"}],["$","title","2",{"children":"Átomos de Píxel — MILPA"}],["$","meta","3",{"name":"description","content":"Port a p5 del sketch de Processing pixelAtomProject: captura una imagen (webcam o archivo), la descompone en partículas de color que conservan el píxel original y las anima con 15 modos —steering behaviors (seguir, deambular, manada, vórtice, explosión), composiciones generativas (líneas, círculos, rectángulos, hue-shift) y colonización de espacios— sobre 7 tipos de flow field con transiciones suaves, 9 formas de partícula (incluido ASCII/Matrix) y estelas/mezcla aditiva. Sin el control OSC del original."}],["$","link","4",{"rel":"icon","href":"/icon.svg?e5bdd04178928d30","type":"image/svg+xml","sizes":"any"}]]
+1:null
+7:I[9999,["648","static/chunks/648-a963bf0325acd59f.js","248","static/chunks/248-d6599906352e0886.js","935","static/chunks/app/sketch/%5Bslug%5D/page-43cd12cfc7941233.js"],"default"]
+8:T1ac2c,// ───────────── pixelAtomProject.pde ─────────────
+
+//PROYECTO ATOM
+//Este software toma una fotografia y la descompone en pixeles de colores
+//que pueden ser manipulados en el canvas
+
+import processing.video.*;
+import java.util.HashMap;
+import java.io.File;
+
+ImageSource source;   // de dónde proviene la imagen (cámara, archivo, ...)
+FlowField campo;
+PixelCluster cluster;
+PixelComposer composer;  // análisis de píxeles para composiciones generativas
+PImage img;
+int cellSize = 12;        // tamaño de celda/partícula por defecto
+int flockCellSize = 24;   // tamaño de celda exclusivo del modo FLOCK (menos agentes, más nítido)
+int composeCellSize = 20; // tamaño de celda de las composiciones generativas (líneas/círculos/rectángulos)
+int cameraIndex = 5;      // índice de la cámara a usar (ver lista en consola)
+
+AppState state = new AppState();                 // estado centralizado de la app
+RenderSettings render = new RenderSettings();    // ajustes de render (fondo, mezcla, tamaño)
+HashMap<AnimationMode, Animation> animations;    // modo -> comportamiento
+AnimationMode lastMode = null;                   // para detectar cambios de modo
+
+InteractionController input;   // comandos de la app (teclado + OSC)
+OscController osc;             // control remoto por OSC (WiFi)
+
+Config config;                // configuración persistente (editable en la GUI)
+String[] cameraNames;         // cámaras disponibles (para el dropdown)
+boolean configuring = true;   // true: pantalla de configuración; false: animación
+String asciiText = "";         // texto a "escribir" con las partículas (forma CHAR)
+
+ArrayList<Repulsor> repulsors = new ArrayList<Repulsor>();  // explosiones activas (tecla espacio)
+
+SpaceColonization colonizer;     // algoritmo de colonización de espacios (modo COLONIZE)
+float colonizeThreshold = 140;   // umbral de brillo (0..255) para elegir semillas
+float colonizeAttraction = 60;   // distancia de atracción de un atractor a un nodo
+float colonizeKill = 10;         // distancia a la que el atractor se da por alcanzado
+float colonizeSeg = 6;           // longitud de cada segmento de crecimiento
+
+// --- Valores OSC por defecto (la GUI/config.json pueden sobrescribirlos) ---
+int    oscListenPort = 7000;             // puerto donde escuchamos comandos
+String oscRemoteIp   = "192.168.88.64";  // IP del dispositivo que recibe el feedback
+int    oscRemotePort = 7001;             // puerto del dispositivo remoto
+
+void setup() {
+  //size(1280,1024);
+  //size(1920,1080);
+  size(1280,720);
+  //size(640, 480);
+  //fullScreen();
+
+  registerAnimations();
+  input = new InteractionController();
+
+  // Tipografía monoespaciada (consola) para la forma CHAR / estilo Matrix.
+  render.monoFont = createFont("Monospaced", 48);
+  render.monoFontBold = createFont("Monospaced.bold", 48);
+
+  String[] cameras = Capture.list();
+  if (cameras.length == 0) {
+    println("No hay camaras disponibles");
+    exit();
+    return;
+  }
+  cameraNames = cameras;
+  println("Las cámaras disponibles son:");
+  for (int i = 0; i < cameras.length; i++) {
+    print(i);
+    print(" ---- ");
+    println(cameras[i]);
+  }
+
+  // Carga la configuración previa (o usa los valores por defecto de arriba) y
+  // muestra la GUI. La cámara y el OSC se crean al pulsar "Iniciar" (startApp).
+  config = new Config(oscRemoteIp, oscListenPort, oscRemotePort, cellSize, flockCellSize, cameraIndex, asciiText);
+  config.load();
+  buildConfigGui();
+}
+
+// Construye el registro de modos -> animaciones. Para agregar un modo nuevo,
+// solo hay que registrarlo aquí (y declararlo en el enum AnimationMode).
+void registerAnimations() {
+  animations = new HashMap<AnimationMode, Animation>();
+  animations.put(AnimationMode.ORIGINAL, new OriginalAnimation());
+  animations.put(AnimationMode.MOUSE,    new MouseAnimation());
+  animations.put(AnimationMode.FIELD,    new FieldAnimation());
+  animations.put(AnimationMode.WALK,     new WalkAnimation());
+  animations.put(AnimationMode.SWEEP,    new SweepAnimation());
+  animations.put(AnimationMode.SHAKE,    new ShakeAnimation());
+  animations.put(AnimationMode.FLOCK,    new FlockAnimation());
+  animations.put(AnimationMode.VORTEX,   new VortexAnimation());
+  animations.put(AnimationMode.EXPLODE,  new ExplodeAnimation());
+  animations.put(AnimationMode.GRAVITY,  new GravityAnimation());
+  animations.put(AnimationMode.LINES,    new LinesAnimation());
+  animations.put(AnimationMode.CIRCLES,  new CirclesAnimation());
+  animations.put(AnimationMode.RECTS,    new RectsAnimation());
+  animations.put(AnimationMode.HUESHIFT, new HueShiftAnimation());
+  animations.put(AnimationMode.COLONIZE, new ColonizeAnimation());
+}
+
+void draw() {
+  if (configuring) {
+    drawConfigScreen();   // pantalla de configuración (controlP5 dibuja encima)
+    return;
+  }
+  if (state.cameraMode) {
+    // Vista previa en vivo de la fuente de imagen.
+    if (source != null) {
+      source.update();
+      source.draw();
+    }
+  } else if (state.playing) {
+    play();
+  }
+}
+
+void play() {
+  if (campo != null) campo.update();   // avanza la transición de flow field, si la hay
+  applyBackground();                   // limpia / estela según RenderSettings
+  if (state.showField && campo != null) campo.mostrarCampo();
+
+  Animation animation = animations.get(state.mode);
+  if (animation == null) return;
+
+  // enter() se ejecuta una sola vez, el primer frame en que el modo se activa.
+  if (state.mode != lastMode) {
+    ensureClusterForMode(state.mode);    // FLOCK usa su propio cellSize
+    ensureComposerForMode(state.mode);   // HUESHIFT usa cellSize; resto composeCellSize
+    animation.enter(cluster, state);
+    lastMode = state.mode;
+  }
+
+  // Fuerzas de explosión: se acumulan ANTES de integrar, así se suman a la
+  // fuerza del comportamiento activo en el mismo frame.
+  if (cluster != null) cluster.applyRepulsors(repulsors);
+
+  // La mezcla aditiva hace que las partículas brillen al superponerse.
+  if (render.additive) blendMode(ADD);
+  animation.update(cluster, campo, state);
+  if (render.additive) blendMode(BLEND);   // restaurar para el resto del dibujo
+
+  updateRepulsors();   // dibuja y envejece las explosiones activas
+}
+
+// Dibuja, envejece y elimina los repulsores (explosiones) ya consumidos.
+void updateRepulsors() {
+  for (int i = repulsors.size() - 1; i >= 0; i--) {
+    Repulsor r = repulsors.get(i);
+    r.draw();
+    r.age();
+    if (r.dead()) repulsors.remove(i);
+  }
+}
+
+// Limpia el canvas según el modo de fondo, definiendo el efecto de estela.
+void applyBackground() {
+  switch (render.background) {
+    case CLEAR:
+      background(0);
+      break;
+    case TRAILS:
+      noStroke();
+      fill(0, render.trailFade);
+      rect(0, 0, width, height);
+      break;
+    case PERSIST:
+      break;  // no se limpia: estelas permanentes
+  }
+}
+
+// Reconstruye el cluster si el modo necesita un cellSize distinto al actual.
+// FLOCK usa flockCellSize (menos agentes, más nítido); el resto usa cellSize.
+// Solo reconstruye cuando el tamaño objetivo cambia, así alternar entre modos
+// del mismo tamaño conserva las posiciones de las partículas.
+void ensureClusterForMode(AnimationMode mode) {
+  if (img == null) return;
+  int target = (mode == AnimationMode.FLOCK) ? flockCellSize : cellSize;
+  if (cluster == null || cluster.cellSize != target) {
+    cluster = makeCluster(target);
+  }
+}
+
+// Reconstruye el composer con el cellSize adecuado al modo de composición:
+// HUESHIFT usa el cellSize normal (mosaico más fino); LINES/CIRCLES/RECTS usan
+// composeCellSize. Los demás modos no usan el composer (no reconstruye).
+void ensureComposerForMode(AnimationMode mode) {
+  if (img == null) return;
+  int target;
+  if (mode == AnimationMode.HUESHIFT) {
+    target = cellSize;
+  } else if (mode == AnimationMode.LINES || mode == AnimationMode.CIRCLES
+             || mode == AnimationMode.RECTS) {
+    target = composeCellSize;
+  } else {
+    return;
+  }
+  if (composer == null || composer.cellSize != target) {
+    composer = new PixelComposer(img, target);
+  }
+}
+
+// Construye un cluster y le aplica el texto ASCII actual (si hay alguno), para
+// que reconstruir el cluster (capturar, cambiar de modo) conserve el texto.
+PixelCluster makeCluster(int size) {
+  PixelCluster c = new PixelCluster(img, size);
+  if (asciiText.length() > 0) c.setText(asciiText);
+  return c;
+}
+
+// Construye el colonizador de espacios. Los atractores se muestrean con
+// flockCellSize (separación/ tamaño de los atractores), independiente del
+// composeCellSize de las composiciones.
+SpaceColonization makeColonizer() {
+  if (img == null) return null;
+  PixelComposer puntos = new PixelComposer(img, flockCellSize);
+  return new SpaceColonization(puntos, colonizeThreshold,
+                               colonizeAttraction, colonizeKill, colonizeSeg);
+}
+
+// Cambia el modo de animación activo. Reinicia lastMode para que enter() se
+// dispare en el siguiente play(), incluso al re-seleccionar el mismo modo
+// (p. ej. volver a pulsar la tecla de explosión la relanza).
+void setMode(AnimationMode mode) {
+  if (mode == null) return;
+  state.mode = mode;
+  lastMode = null;
+  println(mode.label);
+}
+
+// Devuelve el modo asociado a una tecla, o null si ninguna coincide.
+AnimationMode modeForKey(char k) {
+  for (AnimationMode m : AnimationMode.values()) {
+    if (m.key == k) return m;
+  }
+  return null;
+}
+
+// Copia el contenido actual del canvas a una PImage del tamaño del sketch.
+// Lo usan las fuentes (CameraSource/FileSource) para capturar lo que se ve.
+PImage captureCanvas() {
+  loadPixels();
+  PImage out = createImage(width, height, ARGB);
+  out.loadPixels();
+  for (int i = 0; i < out.pixels.length; i++) {
+    out.pixels[i] = pixels[i];
+  }
+  out.updatePixels();
+  return out;
+}
+
+// Abre un diálogo para elegir una imagen de disco (asíncrono; ver callback).
+void cargarImagen() {
+  selectInput("Selecciona una imagen", "imagenSeleccionada");
+}
+
+// Callback de selectInput: cambia a una FileSource con la imagen elegida.
+void imagenSeleccionada(File selection) {
+  if (selection == null) {
+    println("Carga cancelada");
+    return;
+  }
+  source.stop();
+  source = new FileSource(selection.getAbsolutePath());
+  source.start();
+  // Volver a modo vista previa con la nueva fuente.
+  state.cameraMode = true;
+  state.playing = false;
+  cluster = null;
+  campo = null;
+  lastMode = null;
+  println("Imagen cargada: " + selection.getName());
+}
+
+// Captura la imagen actual de la fuente y entra a modo partículas, o vuelve a
+// modo vista previa.
+void togglePhoto() {
+  if (state.cameraMode) {
+    println("Foto tomada");
+    img = source.capture();
+    campo = new FlowField(img, cellSize * 2);
+    cluster = makeCluster(cellSize);
+    composer = new PixelComposer(img, composeCellSize);  // analiza y guarda los píxeles
+    source.stop();
+    state.cameraMode = false;
+    lastMode = null;
+  } else {
+    println("Modo Camara");
+    cluster.reset();
+    setMode(AnimationMode.ORIGINAL);
+    state.playing = false;
+    state.cameraMode = true;
+    lastMode = null;
+    source.start();
+  }
+}
+
+// El teclado y OSC delegan en el mismo InteractionController.
+void keyPressed() {
+  if (configuring) {
+    handleConfigKey();   // edita el text area (o deja los campos cp5 a controlP5)
+    return;
+  }
+  input.handleKey(key, keyCode);
+}
+
+// Callback de oscP5: cada mensaje OSC entrante llega aquí.
+void oscEvent(OscMessage msg) {
+  if (osc != null) osc.handle(msg);
+}
+
+// ───────────── AnimationMode.pde ─────────────
+
+// Identidad de cada modo de animación: la tecla que lo activa y su etiqueta.
+// Reemplaza el antiguo `selector` int (1..7) con valores nombrados.
+// Para agregar un modo: añadir un valor aquí, registrar su Animation en el
+// sketch (registerAnimations) y crear la clase que implemente Animation.
+enum AnimationMode {
+  ORIGINAL('1', "Modo original"),
+  MOUSE   ('2', "Seguir mouse"),
+  FIELD   ('3', "Atravesar campo"),
+  WALK    ('4', "Deambular"),
+  SWEEP   ('5', "Barrer"),
+  SHAKE   ('6', "Temblar"),
+  FLOCK   ('7', "Manada"),
+  VORTEX  ('8', "Vórtice"),
+  EXPLODE ('9', "Explosión"),
+  GRAVITY ('0', "Gravedad al mouse"),
+  LINES    ('w', "Composición: líneas"),
+  CIRCLES  ('o', "Composición: círculos"),
+  RECTS    ('x', "Composición: rectángulos"),
+  HUESHIFT ('h', "Composición: desplazar matiz"),
+  COLONIZE ('a', "Colonización de espacios");
+
+  final char key;     // tecla que selecciona este modo
+  final String label; // texto que se imprime al activarlo
+
+  AnimationMode(char key, String label) {
+    this.key = key;
+    this.label = label;
+  }
+}
+
+// ───────────── Animations.pde ─────────────
+
+// Comportamiento de animación de un cluster de partículas.
+//
+// Cada modo implementa esta interfaz. El sketch llama a enter() una sola vez
+// (la primera vez que el modo se vuelve activo) y a update() en cada frame.
+// Así, agregar un comportamiento nuevo no requiere modificar ningún switch:
+// basta crear una clase que implemente Animation y registrarla.
+interface Animation {
+  // Se ejecuta una vez al activarse el modo (preparar estado inicial).
+  void enter(PixelCluster cluster, AppState state);
+  // Se ejecuta cada frame mientras el modo está activo.
+  void update(PixelCluster cluster, FlowField campo, AppState state);
+}
+
+// Las partículas regresan a la posición original de la foto (arrive).
+class OriginalAnimation implements Animation {
+  void enter(PixelCluster c, AppState s) {}
+  void update(PixelCluster c, FlowField campo, AppState s) {
+    c.initialPosition();
+  }
+}
+
+// Las partículas persiguen el cursor del mouse (seek).
+class MouseAnimation implements Animation {
+  void enter(PixelCluster c, AppState s) {}
+  void update(PixelCluster c, FlowField campo, AppState s) {
+    c.seguirMouse();
+  }
+}
+
+// Las partículas siguen las direcciones del flow field.
+class FieldAnimation implements Animation {
+  void enter(PixelCluster c, AppState s) {}
+  void update(PixelCluster c, FlowField campo, AppState s) {
+    c.atravesarCampo(campo, "OTHERSIDE");
+  }
+}
+
+// Las partículas deambulan de forma orgánica (wander).
+class WalkAnimation implements Animation {
+  void enter(PixelCluster c, AppState s) {}
+  void update(PixelCluster c, FlowField campo, AppState s) {
+    c.deambularCluster("OTHERSIDE");
+  }
+}
+
+// Las partículas barren el canvas hacia la dirección elegida (flechas).
+class SweepAnimation implements Animation {
+  void enter(PixelCluster c, AppState s) {}
+  void update(PixelCluster c, FlowField campo, AppState s) {
+    c.barrerCluster(s.sweepDirection);
+  }
+}
+
+// Las partículas tiemblan alrededor de su posición (ruido Perlin).
+// enter() guarda la posición estática una sola vez (antes lo hacía firstShake).
+class ShakeAnimation implements Animation {
+  void enter(PixelCluster c, AppState s) {
+    c.savePosition();
+  }
+  void update(PixelCluster c, FlowField campo, AppState s) {
+    c.temblarCluster();
+  }
+}
+
+// Comportamiento de bandada: separación + alineación + cohesión + wander.
+// Usa una grilla espacial (en PixelCluster) para buscar vecinos sin caer en
+// O(n²); aun así, con cellSize muy pequeño (muchas partículas) puede ir pesado.
+class FlockAnimation implements Animation {
+  void enter(PixelCluster c, AppState s) {}
+  void update(PixelCluster c, FlowField campo, AppState s) {
+    c.manadaCluster("OTHERSIDE");
+  }
+}
+
+// Las partículas giran alrededor del centro del canvas (vórtice).
+class VortexAnimation implements Animation {
+  void enter(PixelCluster c, AppState s) {}
+  void update(PixelCluster c, FlowField campo, AppState s) {
+    PVector centro = new PVector(width / 2, height / 2);
+    c.orbitarCluster(centro, 2.0, "OTHERSIDE");
+  }
+}
+
+// Estallido radial desde la posición del mouse; luego las partículas derivan.
+// enter() aplica el impulso una sola vez (al activarse el modo).
+class ExplodeAnimation implements Animation {
+  void enter(PixelCluster c, AppState s) {
+    c.explotar(new PVector(mouseX, mouseY), 12.0);
+  }
+  void update(PixelCluster c, FlowField campo, AppState s) {
+    c.derivarCluster("OTHERSIDE");
+  }
+}
+
+// Atracción tipo gravedad puntual hacia el mouse (más brusca que seguir mouse).
+class GravityAnimation implements Animation {
+  void enter(PixelCluster c, AppState s) {}
+  void update(PixelCluster c, FlowField campo, AppState s) {
+    c.atraerCluster(new PVector(mouseX, mouseY), 60.0, "OTHERSIDE");
+  }
+}
+
+// Composición generativa (no usa física): dibuja el análisis de los píxeles
+// (PixelComposer) como líneas — brillo = longitud, saturación = ángulo,
+// color = color del píxel. Ignora el cluster; se sirve del `composer` global.
+class LinesAnimation implements Animation {
+  void enter(PixelCluster c, AppState s) {}
+  void update(PixelCluster c, FlowField campo, AppState s) {
+    if (composer != null) composer.drawLines();
+  }
+}
+
+// Composición generativa: dibuja el análisis de los píxeles como círculos —
+// brillo = radio, saturación = opacidad, color = relleno del píxel.
+class CirclesAnimation implements Animation {
+  void enter(PixelCluster c, AppState s) {}
+  void update(PixelCluster c, FlowField campo, AppState s) {
+    if (composer != null) composer.drawCircles();
+  }
+}
+
+// Composición generativa: dibuja el análisis de los píxeles como rectángulos —
+// brillo = ancho, saturación = alto, matiz = ángulo, color = relleno.
+class RectsAnimation implements Animation {
+  void enter(PixelCluster c, AppState s) {}
+  void update(PixelCluster c, FlowField campo, AppState s) {
+    if (composer != null) composer.drawRects();
+  }
+}
+
+// Composición generativa ANIMADA: recolorea la imagen desplazando el matiz de
+// cada píxel; el offset avanza con frameCount, así los colores recorren el
+// espectro conservando la estructura de la imagen.
+class HueShiftAnimation implements Animation {
+  void enter(PixelCluster c, AppState s) {}
+  void update(PixelCluster c, FlowField campo, AppState s) {
+    if (composer != null) composer.drawHueShift(frameCount * 0.5);
+  }
+}
+
+// Colonización de espacios: construye una red ramificada desde las semillas
+// (píxeles sobre el umbral de brillo) que coloniza y revela la imagen. enter()
+// reinicia el algoritmo (re-elige semillas con el umbral actual).
+class ColonizeAnimation implements Animation {
+  void enter(PixelCluster c, AppState s) {
+    colonizer = makeColonizer();
+  }
+  void update(PixelCluster c, FlowField campo, AppState s) {
+    if (colonizer != null) {
+      colonizer.grow();
+      colonizer.draw();
+    }
+  }
+}
+
+// ───────────── AppState.pde ─────────────
+
+// Estado de la aplicación: centraliza los flags que antes vivían sueltos como
+// variables globales en el sketch principal (isNew, isPlaying, isCampoActive,
+// blackBack, selector, barrerDirection).
+class AppState {
+  boolean cameraMode      = true;   // true: cámara en vivo / false: modo partículas
+  boolean playing         = false;  // play / pausa de la animación
+  boolean showField       = false;  // mostrar el flow field (debug visual)
+  String  sweepDirection  = "DOWN"; // dirección del barrido (modo SWEEP)
+
+  AnimationMode mode = AnimationMode.ORIGINAL; // modo de animación activo
+
+  void togglePlaying() { playing = !playing; }
+  void toggleField()   { showField = !showField; }
+}
+
+// ───────────── Config.pde ─────────────
+
+// Configuración persistente del sketch: IP/puertos OSC, cellSize, flockCellSize
+// y cámara. Se carga al arrancar y se guarda al confirmar la GUI, así la próxima
+// vez se sugieren por defecto los últimos valores usados (config.json en la
+// carpeta del sketch).
+class Config {
+  String oscIp;
+  int oscListenPort, oscRemotePort;
+  int cellSize, flockCellSize;
+  int cameraIndex;
+  String asciiText;  // texto para el modo letra (forma CHAR)
+
+  // Se inicializa con los valores por defecto del sketch (los globales).
+  Config(String ip, int listenPort, int remotePort, int cell, int flock, int cam, String text) {
+    oscIp = ip;
+    oscListenPort = listenPort;
+    oscRemotePort = remotePort;
+    cellSize = cell;
+    flockCellSize = flock;
+    cameraIndex = cam;
+    asciiText = text;
+  }
+
+  String path() {
+    return sketchPath("config.json");
+  }
+
+  // Carga desde el archivo si existe; si no, conserva los valores por defecto.
+  void load() {
+    File f = new File(path());
+    if (!f.exists()) {
+      println("Sin config previa; usando valores por defecto");
+      return;
+    }
+    try {
+      JSONObject j = loadJSONObject(path());
+      oscIp         = j.getString("oscIp", oscIp);
+      oscListenPort = j.getInt("oscListenPort", oscListenPort);
+      oscRemotePort = j.getInt("oscRemotePort", oscRemotePort);
+      cellSize      = j.getInt("cellSize", cellSize);
+      flockCellSize = j.getInt("flockCellSize", flockCellSize);
+      cameraIndex   = j.getInt("cameraIndex", cameraIndex);
+      asciiText     = j.getString("asciiText", asciiText);
+      println("Config cargada de " + path());
+    } catch (Exception e) {
+      println("Config inválida; usando valores por defecto");
+    }
+  }
+
+  void save() {
+    JSONObject j = new JSONObject();
+    j.setString("oscIp", oscIp);
+    j.setInt("oscListenPort", oscListenPort);
+    j.setInt("oscRemotePort", oscRemotePort);
+    j.setInt("cellSize", cellSize);
+    j.setInt("flockCellSize", flockCellSize);
+    j.setInt("cameraIndex", cameraIndex);
+    j.setString("asciiText", asciiText);
+    saveJSONObject(j, path());
+    println("Config guardada en " + path());
+  }
+}
+
+// ───────────── ConfigScreen.pde ─────────────
+
+import controlP5.*;
+import java.awt.Toolkit;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.DataFlavor;
+
+// Pantalla de configuración inicial (GUI con controlP5).
+//
+// REQUIERE la librería controlP5 (Processing > Sketch > Import Library > Manage
+// Libraries... > buscar "ControlP5" e instalar).
+//
+// Campos de controlP5 para la IP/puertos OSC, cellSize y flockCellSize, un
+// dropdown de cámaras, y un TEXT AREA propio (multilínea) para el texto del modo
+// letra que acepta Enter, Tab y pegar del portapapeles (Ctrl+V). Los valores por
+// defecto vienen de `config`. Al pulsar "Iniciar" se guarda la config y arranca.
+
+ControlP5 cp5;
+int selectedCameraIndex = 0;  // índice de cámara elegido en el dropdown
+
+// --- Text area propio (multilínea) para el texto del modo letra ---
+String textAreaContent = "";    // contenido editable (con \n y \t)
+boolean textAreaFocused = false;
+boolean ctrlDown = false;       // para detectar Ctrl+V
+int taX = 250, taY = 254, taW = 320, taH = 90;  // caja del text area
+String[] FIELD_NAMES = { "oscIp", "oscListenPort", "oscRemotePort", "cellSize", "flockCellSize" };
+
+void buildConfigGui() {
+  cp5 = new ControlP5(this);
+  int x = 250, y = 54, w = 200, h = 24, gap = 40;
+
+  cp5.addTextfield("oscIp")
+     .setPosition(x, y).setSize(w, h).setAutoClear(false)
+     .setText(config.oscIp).setLabel("OSC IP remota");
+  y += gap;
+  cp5.addTextfield("oscListenPort")
+     .setPosition(x, y).setSize(w, h).setAutoClear(false)
+     .setText("" + config.oscListenPort).setLabel("Puerto de escucha OSC");
+  y += gap;
+  cp5.addTextfield("oscRemotePort")
+     .setPosition(x, y).setSize(w, h).setAutoClear(false)
+     .setText("" + config.oscRemotePort).setLabel("Puerto remoto OSC");
+  y += gap;
+  cp5.addTextfield("cellSize")
+     .setPosition(x, y).setSize(w, h).setAutoClear(false)
+     .setText("" + config.cellSize).setLabel("cellSize (particulas)");
+  y += gap;
+  cp5.addTextfield("flockCellSize")
+     .setPosition(x, y).setSize(w, h).setAutoClear(false)
+     .setText("" + config.flockCellSize).setLabel("flockCellSize (flock)");
+
+  // Text area propio (no es de controlP5): se ubica en (taX, taY).
+  textAreaContent = (config.asciiText == null) ? "" : config.asciiText;
+  textAreaFocused = false;
+
+  // Dropdown de cámaras disponibles (debajo del text area).
+  ScrollableList cams = cp5.addScrollableList("camera")
+     .setPosition(taX, taY + taH + 28).setSize(w, 90).setBarHeight(h).setItemHeight(22)
+     .setLabel("Camara");
+  for (int i = 0; i < cameraNames.length; i++) {
+    cams.addItem(i + ": " + cameraNames[i], i);
+  }
+  selectedCameraIndex = constrain(config.cameraIndex, 0, max(0, cameraNames.length - 1));
+  cams.setValue(selectedCameraIndex);
+  if (cameraNames.length > 0) {
+    cams.getCaptionLabel().setText(selectedCameraIndex + ": " + cameraNames[selectedCameraIndex]);
+  }
+
+  cp5.addButton("start")
+     .setPosition(taX, taY + taH + 160).setSize(w, 34).setLabel("Iniciar");
+}
+
+// Se dibuja cada frame mientras `configuring` es true (controlP5 dibuja sus
+// controles encima automáticamente).
+void drawConfigScreen() {
+  background(20);
+  fill(255);
+  textAlign(LEFT, BASELINE);
+  textSize(20);
+  text("Configuracion", 250, 40);
+  textSize(11);
+  fill(180);
+  text("Ajusta los valores y pulsa Iniciar", 250, 56);
+
+  drawTextArea();
+}
+
+// Dibuja el text area multilínea (caja + contenido + cursor).
+void drawTextArea() {
+  textSize(11);
+  fill(180);
+  text("Texto (modo letra) — Enter, Tab y Ctrl+V para pegar", taX, taY - 6);
+
+  stroke(textAreaFocused ? color(0, 255, 120) : color(120));
+  strokeWeight(textAreaFocused ? 2 : 1);
+  fill(35);
+  rect(taX, taY, taW, taH);
+  noStroke();
+
+  textAlign(LEFT, TOP);
+  textSize(13);
+  float lh = 16;
+  int maxLines = (int) ((taH - 10) / lh);
+
+  if (textAreaContent.length() == 0 && !textAreaFocused) {
+    fill(110);
+    text("(clic para escribir)", taX + 6, taY + 6);
+  } else {
+    fill(225);
+    String shown = textAreaContent.replace("\t", "    ");  // tabs -> espacios al mostrar
+    String[] lines = split(shown, '\n');
+    int startLine = max(0, lines.length - maxLines);  // muestra las últimas líneas
+    float ly = taY + 6;
+    for (int i = startLine; i < lines.length; i++) {
+      String line = lines[i];
+      // Cursor parpadeante al final de la última línea.
+      if (i == lines.length - 1 && textAreaFocused && (frameCount / 30) % 2 == 0) line += "|";
+      text(line, taX + 6, ly);
+      ly += lh;
+    }
+  }
+  textAlign(LEFT, BASELINE);
+}
+
+boolean overTextArea() {
+  return mouseX >= taX && mouseX <= taX + taW && mouseY >= taY && mouseY <= taY + taH;
+}
+
+// Foco del text area por clic; al enfocarlo, quita el foco de los campos cp5.
+void mousePressed() {
+  if (!configuring) return;
+  if (overTextArea()) {
+    textAreaFocused = true;
+    for (String n : FIELD_NAMES) {
+      Textfield tf = (Textfield) cp5.get(Textfield.class, n);
+      if (tf != null) tf.setFocus(false);
+    }
+  } else {
+    textAreaFocused = false;
+  }
+}
+
+// Maneja el teclado durante la configuración. Si el text area tiene foco, edita
+// su contenido (Enter/Tab/Backspace/Ctrl+V); si no, deja que controlP5 maneje
+// sus campos.
+void handleConfigKey() {
+  if (keyCode == CONTROL || keyCode == 157) { ctrlDown = true; return; }  // Ctrl/Cmd
+  if (!textAreaFocused) return;
+
+  if (ctrlDown) {
+    if (keyCode == 86) textAreaContent += getClipboard();  // Ctrl+V: pegar
+    return;
+  }
+  if (key == BACKSPACE) {
+    if (textAreaContent.length() > 0)
+      textAreaContent = textAreaContent.substring(0, textAreaContent.length() - 1);
+  } else if (key == ENTER || key == RETURN) {
+    textAreaContent += "\n";
+  } else if (key == TAB) {
+    textAreaContent += "\t";
+  } else if (key != CODED && key >= 32 && key != DELETE) {
+    textAreaContent += key;
+  }
+}
+
+void keyReleased() {
+  if (keyCode == CONTROL || keyCode == 157) ctrlDown = false;
+}
+
+// Lee el texto del portapapeles del sistema (cadena vacía si falla o no hay).
+String getClipboard() {
+  try {
+    Clipboard c = Toolkit.getDefaultToolkit().getSystemClipboard();
+    Object data = c.getData(DataFlavor.stringFlavor);
+    return (data != null) ? data.toString() : "";
+  } catch (Exception e) {
+    println("No se pudo leer el portapapeles: " + e.getMessage());
+    return "";
+  }
+}
+
+// Callback del dropdown de cámara (controlP5 lo invoca al cambiar un control).
+// Se blinda contra eventos sin controlador (grupos/tabs) que darían null.
+void controlEvent(ControlEvent e) {
+  if (e == null || !e.isController() || e.getController() == null) return;
+  if (e.getController().getName().equals("camera")) {
+    selectedCameraIndex = (int) e.getController().getValue();
+  }
+}
+
+// Callback del botón "Iniciar": lee los campos, guarda la config y arranca.
+void start() {
+  if (cp5 == null) return;
+  config.oscIp         = textOf("oscIp", config.oscIp);
+  config.oscListenPort = parseIntOr(textOf("oscListenPort", ""), config.oscListenPort);
+  config.oscRemotePort = parseIntOr(textOf("oscRemotePort", ""), config.oscRemotePort);
+  config.cellSize      = max(1, parseIntOr(textOf("cellSize", ""), config.cellSize));
+  config.flockCellSize = max(1, parseIntOr(textOf("flockCellSize", ""), config.flockCellSize));
+  config.asciiText     = textAreaContent;   // del text area propio (multilínea)
+
+  // Lee la cámara directamente del dropdown (no depende de controlEvent).
+  int cam = selectedCameraIndex;
+  ScrollableList list = (ScrollableList) cp5.get(ScrollableList.class, "camera");
+  if (list != null) cam = (int) list.getValue();
+  config.cameraIndex = constrain(cam, 0, max(0, cameraNames.length - 1));
+
+  config.save();
+  startApp();
+}
+
+// Devuelve el texto de un Textfield por nombre, con valor por defecto si falta.
+String textOf(String name, String def) {
+  Textfield tf = (Textfield) cp5.get(Textfield.class, name);
+  if (tf == null || tf.getText() == null) return def;
+  return tf.getText().trim();
+}
+
+// Aplica la config a los globales, crea la cámara y el OSC, y pasa a animación.
+void startApp() {
+  oscRemoteIp   = config.oscIp;
+  oscListenPort = config.oscListenPort;
+  oscRemotePort = config.oscRemotePort;
+  cellSize      = config.cellSize;
+  flockCellSize = config.flockCellSize;
+  cameraIndex   = config.cameraIndex;
+  asciiText     = config.asciiText;
+
+  source = new CameraSource(this, cameraNames[cameraIndex]);
+  source.start();
+  osc = new OscController(this, input, oscListenPort, oscRemoteIp, oscRemotePort);
+
+  cp5.hide();           // ocultar la GUI
+  configuring = false;  // pasar a la animación normal
+  state.cameraMode = true;
+  println("Modo Camara");
+}
+
+int parseIntOr(String s, int def) {
+  try {
+    return Integer.parseInt(s.trim());
+  } catch (Exception e) {
+    return def;
+  }
+}
+
+// ───────────── FlowField.pde ─────────────
+
+// The Nature of Code
+//
+// Campo vectorial 2D que guía el movimiento de las partículas (PixelAtom).
+// Cada celda de la rejilla guarda un PVector unitario que indica la dirección
+// de flujo en esa zona del canvas. El campo puede generarse a partir de:
+//   - ruido Perlin (buildNoise)
+//   - el brillo de una imagen (buildImage)
+//
+// Al cambiar de campo se puede hacer de forma inmediata (initNoise/initImage) o
+// con una transición suave (transitionToNoise/transitionToImage), en la que
+// cada celda gira hacia su nueva dirección por el arco más corto.
+
+class FlowField {
+
+  PVector[][] field;        // campo actual (el que se consulta con lookup)
+  PVector[][] fieldTarget;  // campo objetivo durante una transición
+  int cols, rows;           // columnas y filas
+  int resolution;           // tamaño en píxeles de cada celda
+
+  boolean transitioning;    // ¿hay una transición en curso?
+  float transitionSpeed;    // fracción de giro hacia el objetivo por frame (0..1)
+
+  FlowField(int r) {
+    initGrid(r);
+    field = buildNoise();
+  }
+
+  FlowField(PImage picture, int r) {
+    initGrid(r);
+    field = buildImage(picture);
+  }
+
+  // Calcula columnas/filas a partir del tamaño del sketch.
+  void initGrid(int r) {
+    resolution = r;
+    cols = width / resolution;
+    rows = height / resolution;
+    transitioning = false;
+    transitionSpeed = 0.05;
+  }
+
+  ///////////////////  GENERADORES DE CAMPO  ///////////////////
+
+  // Construye una rejilla nueva a partir de ruido Perlin.
+  PVector[][] buildNoise() {
+    PVector[][] grid = new PVector[cols][rows];
+    noiseSeed((int) random(10000));
+    float xoff = 0;
+    for (int i = 0; i < cols; i++) {
+      float yoff = 0;
+      for (int j = 0; j < rows; j++) {
+        float theta = map(noise(xoff, yoff), 0, 1, 0, TWO_PI);
+        grid[i][j] = PVector.fromAngle(theta);
+        yoff += 0.1;
+      }
+      xoff += 0.1;
+    }
+    return grid;
+  }
+
+  // Construye una rejilla nueva a partir del brillo de la imagen.
+  PVector[][] buildImage(PImage imagen) {
+    PVector[][] grid = new PVector[cols][rows];
+    imagen.loadPixels();
+    for (int i = 0; i < cols; i++) {
+      for (int j = 0; j < rows; j++) {
+        int x = constrain(i * resolution, 0, imagen.width - 1);
+        int y = constrain(j * resolution, 0, imagen.height - 1);
+        int c = imagen.pixels[x + y * imagen.width];
+        float theta = map(brightness(c), 0, 255, 0, TWO_PI);
+        grid[i][j] = PVector.fromAngle(theta);
+      }
+    }
+    return grid;
+  }
+
+  // Campo radial: cada celda apunta hacia afuera desde el centro del canvas
+  // (efecto fuente/explosión). Con outward=false apunta hacia el centro.
+  PVector[][] buildRadial(boolean outward) {
+    PVector[][] grid = new PVector[cols][rows];
+    PVector center = new PVector(width / 2, height / 2);
+    for (int i = 0; i < cols; i++) {
+      for (int j = 0; j < rows; j++) {
+        PVector dir = PVector.sub(cellCenter(i, j), center);
+        if (dir.mag() < 0.001) dir = PVector.random2D();
+        dir.normalize();
+        if (!outward) dir.mult(-1);
+        grid[i][j] = dir;
+      }
+    }
+    return grid;
+  }
+
+  // Campo circular: cada celda es tangente al círculo centrado en el canvas
+  // (remolino global). El sentido del giro depende de 'clockwise'.
+  PVector[][] buildCircular(boolean clockwise) {
+    PVector[][] grid = new PVector[cols][rows];
+    PVector center = new PVector(width / 2, height / 2);
+    for (int i = 0; i < cols; i++) {
+      for (int j = 0; j < rows; j++) {
+        PVector radial = PVector.sub(cellCenter(i, j), center);
+        // Tangente = radial rotado 90°.
+        PVector tangent = clockwise
+          ? new PVector(radial.y, -radial.x)
+          : new PVector(-radial.y, radial.x);
+        if (tangent.mag() < 0.001) tangent = PVector.random2D();
+        grid[i][j] = tangent.normalize();
+      }
+    }
+    return grid;
+  }
+
+  // Posición (centro) de la celda (i, j) en coordenadas del canvas.
+  PVector cellCenter(int i, int j) {
+    return new PVector(i * resolution + resolution / 2,
+                       j * resolution + resolution / 2);
+  }
+
+  // --- Campos con forma (curvas paramétricas) ---
+  // Cada celda toma la TANGENTE del punto más cercano de la curva, más una
+  // atracción hacia ese punto, de modo que las partículas se ciñen a la figura
+  // y la trazan con definición (en vez de circular alrededor como con isolíneas).
+  // shape: 0 = corazón, 1 = infinito (lemniscata).
+  PVector[][] buildParametric(int shape) {
+    PVector[][] grid = new PVector[cols][rows];
+    int N = 360;
+    PVector[] pts  = new PVector[N];
+    PVector[] tans = new PVector[N];
+    for (int k = 0; k < N; k++) {
+      float t = map(k, 0, N, 0, TWO_PI);
+      pts[k]  = curvePoint(shape, t);
+      PVector nxt = curvePoint(shape, t + TWO_PI / N);
+      tans[k] = PVector.sub(nxt, pts[k]);
+      if (tans[k].mag() < 1e-6) tans[k] = PVector.random2D();
+      tans[k].normalize();
+    }
+    for (int i = 0; i < cols; i++) {
+      for (int j = 0; j < rows; j++) {
+        PVector c = cellCenter(i, j);
+        int best = 0;
+        float bd = Float.MAX_VALUE;
+        for (int k = 0; k < N; k++) {
+          float dd = PVector.dist(c, pts[k]);
+          if (dd < bd) { bd = dd; best = k; }
+        }
+        PVector tan = tans[best].copy();
+        PVector pull = PVector.sub(pts[best], c);   // hacia la curva
+        if (pull.mag() > 0.001) pull.normalize().mult(0.6);
+        grid[i][j] = tan.add(pull).normalize();
+      }
+    }
+    return grid;
+  }
+
+  // Punto de la curva paramétrica 'shape' en t∈[0,2π], en coords de pantalla.
+  PVector curvePoint(int shape, float t) {
+    float base = min(width, height) * 0.40;  // tamaño de la figura
+    float mx, my;
+    if (shape == 0) {
+      // Corazón clásico: lóbulos marcados arriba, punta abajo.
+      mx = 16 * pow(sin(t), 3);
+      my = 13 * cos(t) - 5 * cos(2 * t) - 2 * cos(3 * t) - cos(4 * t);
+      mx /= 17.0;
+      my /= 17.0;
+      my += 0.10;  // centra un poco verticalmente
+    } else {
+      // Infinito (lemniscata): lóbulos más grandes y separados.
+      float d = 1 + sin(t) * sin(t);
+      mx = 1.8 * cos(t) / d;          // ensancha y separa los lóbulos
+      my = 1.15 * sin(t) * cos(t) / d; // mayor diámetro vertical
+    }
+    // Math (Y arriba) -> pantalla (Y abajo).
+    return new PVector(width / 2 + mx * base, height / 2 - my * base);
+  }
+
+  PVector[][] buildHeart()    { return buildParametric(0); }
+  PVector[][] buildInfinity() { return buildParametric(1); }
+
+  // Campo espiral tipo FILOTAXIS (espiral de Fermat / núcleo de flor): el ángulo
+  // entre la dirección del flujo y el radio crece con el radio,
+  //   ψ = atan(2·ρ² / a²),
+  // así cerca del centro el flujo es casi radial (los brazos salen disparados) y
+  // lejos es casi tangencial (se enrollan), formando brazos espirales áureos que
+  // se ABREN hacia afuera (no colapsan al centro). 'a' controla la apertura.
+  PVector[][] buildSpiral(boolean clockwise) {
+    PVector[][] grid = new PVector[cols][rows];
+    PVector center = new PVector(width / 2, height / 2);
+    float a = min(width, height) * 0.35;
+    for (int i = 0; i < cols; i++) {
+      for (int j = 0; j < rows; j++) {
+        PVector radial = PVector.sub(cellCenter(i, j), center);
+        float rho = radial.mag();
+        if (rho < 0.001) { grid[i][j] = PVector.random2D(); continue; }
+        radial.normalize();
+        // Tangencial (perpendicular al radio), según el sentido de giro.
+        PVector tang = clockwise
+          ? new PVector(radial.y, -radial.x)
+          : new PVector(-radial.y, radial.x);
+        float psi = atan2(2 * rho * rho, a * a);  // 0 (centro) -> PI/2 (lejos)
+        PVector dir = PVector.add(PVector.mult(radial, cos(psi)),   // hacia afuera
+                                  PVector.mult(tang,   sin(psi)));  // enrollado
+        grid[i][j] = dir.normalize();
+      }
+    }
+    return grid;
+  }
+
+  ///////////////////  CAMBIO DE CAMPO  ///////////////////
+
+  // Cambio inmediato (sin transición).
+  void initNoise() {
+    field = buildNoise();
+    transitioning = false;
+  }
+
+  void initImage(PImage imagen) {
+    field = buildImage(imagen);
+    transitioning = false;
+  }
+
+  // Cambio con transición suave hacia el nuevo campo.
+  void transitionToNoise() {
+    startTransition(buildNoise());
+  }
+
+  void transitionToImage(PImage imagen) {
+    startTransition(buildImage(imagen));
+  }
+
+  void transitionToRadial() {
+    startTransition(buildRadial(true));
+  }
+
+  void transitionToCircular() {
+    startTransition(buildCircular(false));
+  }
+
+  void transitionToHeart() {
+    startTransition(buildHeart());
+  }
+
+  void transitionToInfinity() {
+    startTransition(buildInfinity());
+  }
+
+  void transitionToSpiral() {
+    startTransition(buildSpiral(true));
+  }
+
+  void startTransition(PVector[][] target) {
+    fieldTarget = target;
+    transitioning = true;
+  }
+
+  // Avanza la transición un paso. Debe llamarse una vez por frame mientras se
+  // está en modo partículas. Gira cada celda hacia su objetivo por el arco más
+  // corto; al converger, fija el objetivo y termina la transición.
+  void update() {
+    if (!transitioning) return;
+    boolean done = true;
+    for (int i = 0; i < cols; i++) {
+      for (int j = 0; j < rows; j++) {
+        float a = field[i][j].heading();
+        float b = fieldTarget[i][j].heading();
+        float diff = shortestAngle(a, b);
+        if (abs(diff) > 0.01) done = false;
+        field[i][j] = PVector.fromAngle(a + diff * transitionSpeed);
+      }
+    }
+    if (done) {
+      field = fieldTarget;
+      transitioning = false;
+    }
+  }
+
+  // Diferencia angular más corta (con signo) de 'a' a 'b', en [-PI, PI].
+  float shortestAngle(float a, float b) {
+    float diff = b - a;
+    while (diff < -PI) diff += TWO_PI;
+    while (diff >  PI) diff -= TWO_PI;
+    return diff;
+  }
+
+  ///////////////////  CONSULTA Y DIBUJO  ///////////////////
+
+  // Devuelve una copia del vector de flujo en la celda que contiene 'pos'.
+  PVector lookup(PVector pos) {
+    int column = int(constrain(pos.x / resolution, 0, cols - 1));
+    int row = int(constrain(pos.y / resolution, 0, rows - 1));
+    return field[column][row].copy();
+  }
+
+  // Dibuja el campo completo como flechas (debug visual).
+  void mostrarCampo() {
+    for (int i = 0; i < cols; i++) {
+      for (int j = 0; j < rows; j++) {
+        float x = i * resolution + resolution / 2;
+        float y = j * resolution + resolution / 2;
+        drawVector(field[i][j], x, y, resolution);
+      }
+    }
+  }
+
+  // Dibuja el vector 'v' como una flecha en la posición 'x,y'.
+  void drawVector(PVector v, float x, float y, float scayl) {
+    pushMatrix();
+    translate(x, y);
+    strokeWeight(1);
+    stroke(255, 0, 0);
+    // El heading da la dirección (0 = apuntando a la derecha); rotamos a ella.
+    rotate(v.heading());
+    float len = v.mag() * scayl;
+    line(0, 0, len, 0);
+    popMatrix();
+  }
+}
+
+// ───────────── ImageSource.pde ─────────────
+
+// Fuente de imagen: abstrae DE DÓNDE proviene la imagen que se descompone en
+// partículas. Implementaciones: CameraSource (cámara web) y FileSource (archivo
+// de disco). Agregar otra fuente no requiere tocar el sketch principal.
+//
+// Ciclo de vida típico (en modo "preview"):
+//   start()  -> update() cada frame -> draw() cada frame -> capture() al fijar
+//   stop()   cuando se sale del modo preview
+interface ImageSource {
+  void start();        // comenzar / reanudar la fuente (vista previa en vivo)
+  void stop();         // detener la fuente
+  void update();       // avanzar/leer el frame actual (una vez por draw)
+  void draw();         // dibujar la vista previa en el canvas
+  boolean isReady();   // ¿la fuente está lista para capturar?
+  PImage capture();    // devuelve una PImage del frame actual (tal como se ve)
+}
+
+// Fuente basada en la cámara web (librería processing.video).
+class CameraSource implements ImageSource {
+  PApplet app;     // referencia al sketch (necesaria para construir Capture)
+  Capture cam;
+  boolean mirror;  // dibujar la vista en espejo (como un selfie)
+
+  CameraSource(PApplet app, String cameraName) {
+    this.app = app;
+    this.mirror = true;
+    cam = new Capture(app, cameraName);
+  }
+
+  void start() { cam.start(); }
+  void stop()  { cam.stop(); }
+
+  void update() {
+    if (cam.available()) cam.read();
+  }
+
+  void draw() {
+    pushMatrix();
+    if (mirror) {
+      translate(width, 0);
+      scale(-1, 1);
+    }
+    image(cam, 0, 0, width, height);
+    popMatrix();
+  }
+
+  boolean isReady() {
+    return cam != null;
+  }
+
+  // Captura lo que se está mostrando en el canvas (incluye espejo y escalado),
+  // para que la imagen descompuesta coincida con la vista previa.
+  PImage capture() {
+    return captureCanvas();
+  }
+}
+
+// Fuente basada en una imagen cargada desde disco.
+class FileSource implements ImageSource {
+  PImage pic;
+  boolean mirror;  // las imágenes de archivo no se espejan por defecto
+
+  FileSource(String path) {
+    this.mirror = false;
+    pic = loadImage(path);  // null si la ruta no es válida (loadImage avisa)
+  }
+
+  void start() {}  // imagen estática: nada que iniciar
+  void stop()  {}  // nada que detener
+  void update() {} // nada que avanzar entre frames
+
+  void draw() {
+    if (pic == null) {
+      background(0);
+      return;
+    }
+    pushMatrix();
+    if (mirror) {
+      translate(width, 0);
+      scale(-1, 1);
+    }
+    image(pic, 0, 0, width, height);  // escala la imagen al tamaño del canvas
+    popMatrix();
+  }
+
+  boolean isReady() {
+    return pic != null;
+  }
+
+  PImage capture() {
+    return captureCanvas();
+  }
+}
+
+// ───────────── InteractionController.pde ─────────────
+
+// Controlador de interacciones: centraliza TODOS los comandos de la aplicación.
+// El teclado (handleKey) y OSC (OscController) llaman a estos mismos comandos,
+// así la lógica de control vive en un único lugar y no se duplica.
+//
+// Como es una clase interna del sketch, accede directamente a los globales
+// (state, render, cluster, campo, img) y a las funciones de orquestación
+// (setMode, togglePhoto, cargarImagen, modeForKey).
+class InteractionController {
+
+  /////////////////// COMANDOS ///////////////////
+  // (Los usan tanto el teclado como OSC.)
+
+  // --- Reproducción / fuente ---
+  void play() {
+    state.togglePlaying();
+    println("Play / Pause");
+  }
+
+  void reset() {
+    if (state.playing && cluster != null) {
+      cluster.reset();
+      setMode(AnimationMode.ORIGINAL);
+    }
+    println("Reset");
+  }
+
+  void capturePhoto() { togglePhoto(); }
+  void loadImage()    { cargarImagen(); }
+
+  // --- Modos de animación ---
+  void selectMode(AnimationMode m) { setMode(m); }
+
+  // Selección por índice 1..N (cómodo para OSC).
+  void selectMode(int index) {
+    AnimationMode[] modes = AnimationMode.values();
+    if (index >= 1 && index <= modes.length) {
+      setMode(modes[index - 1]);
+    } else {
+      println("Modo fuera de rango: " + index);
+    }
+  }
+
+  void sweepDirection(String dir) { state.sweepDirection = dir.toUpperCase(); }
+
+  // Crea una explosión (repulsor transitorio) en un punto aleatorio; su fuerza
+  // se suma al movimiento actual de las partículas cercanas.
+  void explosion() {
+    PVector p = new PVector(random(width), random(height));
+    repulsors.add(new Repulsor(p, 250, 160, 12));
+    println("Explosión en " + (int) p.x + ", " + (int) p.y);
+  }
+
+  // --- Flow field ---
+  void toggleField()   { state.toggleField(); println("Cambio campo"); }
+  void fieldNoise()    { if (campo != null) campo.transitionToNoise();   println("Noise Field"); }
+  void fieldImage()    { if (campo != null) campo.transitionToImage(img); println("Image Field"); }
+  void fieldRadial()   { if (campo != null) campo.transitionToRadial();   println("Radial Field"); }
+  void fieldCircular() { if (campo != null) campo.transitionToCircular(); println("Circular Field"); }
+  void fieldHeart()    { if (campo != null) campo.transitionToHeart();    println("Heart Field"); }
+  void fieldInfinity() { if (campo != null) campo.transitionToInfinity(); println("Infinity Field"); }
+  void fieldSpiral()   { if (campo != null) campo.transitionToSpiral();   println("Spiral Field"); }
+
+  // --- Partículas ---
+  void changeShape() { render.cycleParticleShape(); println("Forma: " + render.particleShape); }
+  void toggleLife()  { if (cluster != null) cluster.cambiarLifeMode(); println("Cambio la vida"); }
+  void changeSpeed(float delta) {
+    if (cluster != null) cluster.changeSpeed(delta);
+    else println("No hay cluster");
+  }
+
+  // --- Render ---
+  void cycleBackground()   { render.cycleBackground();   println("Fondo: " + render.background); }
+  void toggleAdditive()    { render.toggleAdditive();    println("Mezcla aditiva: " + render.additive); }
+  void toggleDynamicSize() { render.toggleDynamicSize(); println("Tamaño dinámico: " + render.dynamicSize); }
+  void changeTrailFade(float delta) { render.changeTrailFade(delta); println("Trail fade: " + render.trailFade); }
+
+  // --- Tipografía (forma CHAR / estilo ASCII-Matrix) ---
+  void cycleTextColor()  { render.cycleTextColor(); println("Color texto"); }
+  void toggleTextBold()  { render.toggleTextBold(); println("Negrita: " + render.textBold); }
+  void changeTextSize(float delta) { render.changeTextSize(delta); println("Tamaño texto: " + render.textSizeScale); }
+
+  // Fija el texto que "escriben" las partículas (forma CHAR). Vacío = ASCII art.
+  void setText(String t) {
+    asciiText = (t == null) ? "" : t;
+    if (cluster != null) cluster.setText(asciiText);
+    println("Texto: \"" + asciiText + "\"");
+  }
+
+  // --- Colonización de espacios ---
+  void changeColonizeThreshold(float d) { setColonizeThreshold(colonizeThreshold + d); }
+  void setColonizeThreshold(float v) {
+    colonizeThreshold = constrain(v, 0, 255);
+    // Si el modo está activo, reconstruye para re-elegir las semillas.
+    if (state.mode == AnimationMode.COLONIZE) {
+      colonizer = makeColonizer();
+    }
+    println("Umbral colonización: " + colonizeThreshold);
+  }
+
+  // Parámetros del crecimiento (valor absoluto). Se aplican en vivo a la red
+  // actual (afectan a grow()) y quedan guardados para los próximos rebuilds.
+  void setColonizeAttraction(float v) {
+    colonizeAttraction = max(1, v);
+    if (colonizer != null) colonizer.attractionDist = colonizeAttraction;
+    println("Atracción colonización: " + colonizeAttraction);
+  }
+  void setColonizeKill(float v) {
+    colonizeKill = max(1, v);
+    if (colonizer != null) colonizer.killDist = colonizeKill;
+    println("Kill dist colonización: " + colonizeKill);
+  }
+  void setColonizeSeg(float v) {
+    colonizeSeg = max(1, v);
+    if (colonizer != null) colonizer.segLength = colonizeSeg;
+    println("Segmento colonización: " + colonizeSeg);
+  }
+
+  // Rangos de modulación de la letra por brillo (valor absoluto, no delta).
+  void setCharSizeDark(float v)    { render.charSizeDark   = max(0.05, v); println("charSizeDark: " + render.charSizeDark); }
+  void setCharSizeBright(float v)  { render.charSizeBright = max(0.05, v); println("charSizeBright: " + render.charSizeBright); }
+  void setCharAlphaDark(float v)   { render.charAlphaDark   = constrain(v, 0, 255); println("charAlphaDark: " + render.charAlphaDark); }
+  void setCharAlphaBright(float v) { render.charAlphaBright = constrain(v, 0, 255); println("charAlphaBright: " + render.charAlphaBright); }
+
+  /////////////////// ENTRADA POR TECLADO ///////////////////
+
+  void handleKey(char k, int code) {
+    // Teclas de dirección: orientan el barrido (modo SWEEP).
+    if (k == CODED) {
+      switch (code) {
+        case LEFT:  sweepDirection("LEFT");  break;
+        case UP:    sweepDirection("UP");    break;
+        case RIGHT: sweepDirection("RIGHT"); break;
+        case DOWN:  sweepDirection("DOWN");  break;
+      }
+      return;
+    }
+
+    // Dígitos: seleccionan el modo de animación de forma declarativa.
+    AnimationMode mode = modeForKey(k);
+    if (mode != null) {
+      selectMode(mode);
+      return;
+    }
+
+    // Letras y símbolos: acciones y toggles (insensible a mayúsculas).
+    switch (Character.toLowerCase(k)) {
+      case 'b': cycleBackground();    break;
+      case '[': changeTrailFade(-5);  break;
+      case ']': changeTrailFade(5);   break;
+      case 'm': toggleAdditive();     break;
+      case 'n': toggleDynamicSize();  break;
+      case 'j': cycleTextColor();     break;   // color de la tipografía
+      case 'k': toggleTextBold();     break;   // grosor (normal/negrita)
+      case ',': changeTextSize(-0.1); break;   // tamaño de letra -
+      case '.': changeTextSize(0.1);  break;   // tamaño de letra +
+      case 'u': changeColonizeThreshold(-5); break;  // umbral colonización -
+      case 'i': changeColonizeThreshold(5);  break;  // umbral colonización +
+      case 'q': fieldHeart();    break;   // campo corazón
+      case 'y': fieldInfinity(); break;   // campo infinito
+      case 'z': fieldSpiral();   break;   // campo espiral
+      case ' ': explosion();     break;   // explosión (fuerza transitoria)
+      case 'c': toggleField();        break;
+      case 'd': fieldNoise();         break;
+      case 'e': fieldImage();         break;
+      case 'f': fieldRadial();        break;
+      case 'g': fieldCircular();      break;
+      case 'p': play();               break;
+      case 'r': reset();              break;
+      case 's': changeShape();        break;
+      case 'l': loadImage();          break;
+      case 't': capturePhoto();       break;
+      case 'v': toggleLife();         break;
+      case '+': changeSpeed(0.2);     break;
+      case '-': changeSpeed(-0.2);    break;
+      default:  println(code);        break;
+    }
+  }
+}
+
+// ───────────── OscController.pde ─────────────
+
+import oscP5.*;
+import netP5.*;
+
+// Controlador OSC: recibe mensajes para controlar la app y envía el estado como
+// feedback. OSC viaja sobre UDP/IP, así que funciona por WiFi entre dispositivos
+// de la misma red (TouchOSC, Max/MSP, otro Processing, etc.).
+//
+// REQUIERE la librería oscP5 (Processing > Sketch > Import Library > Manage
+// Libraries... > buscar "oscP5" e instalar). Incluye también netP5.
+//
+// Todos los comandos se delegan a InteractionController, el mismo que usa el
+// teclado, de modo que OSC y teclado comparten exactamente la misma lógica.
+//
+// Direcciones OSC que RECIBE:
+//   /play                 -> play / pausa
+//   /reset                -> reset de posiciones
+//   /explode              -> explosión (repulsor transitorio en punto aleatorio)
+//   /capture              -> capturar imagen / volver a vista previa
+//   /load                 -> abrir diálogo para cargar imagen
+//   /mode        i        -> modo de animación por índice (1..10)
+//   /sweep       s        -> dirección de barrido ("LEFT".."DOWN")
+//   /field       s        -> "noise"|"image"|"radial"|"circular"|"heart"|"infinity"|"spiral"
+//   /field/toggle         -> mostrar / ocultar el campo
+//   /shape                -> alternar forma de partícula
+//   /life                 -> alternar modo "vida"
+//   /speed       f        -> cambia la velocidad máxima (delta)
+//   /background           -> ciclo de fondo (limpiar/estela/permanente)
+//   /additive             -> mezcla aditiva on/off
+//   /dynamicsize          -> tamaño dinámico on/off
+//   /trailfade   f        -> cambia la intensidad de la estela (delta)
+//   /text        s        -> texto a "escribir" con las partículas (forma CHAR)
+//   /textcolor            -> ciclo de color de texto (verde/ámbar/blanco)
+//   /textbold             -> grosor de texto on/off
+//   /textsize    f        -> cambia el tamaño de la letra (delta)
+//   /charsizedark    f    -> tamaño de letra para píxeles oscuros (absoluto)
+//   /charsizebright  f    -> tamaño de letra para píxeles brillantes (absoluto)
+//   /charalphadark   f    -> opacidad (0..255) para píxeles oscuros (absoluto)
+//   /charalphabright f    -> opacidad (0..255) para píxeles brillantes (absoluto)
+//   /colonize    f        -> umbral de brillo (0..255) para las semillas (absoluto)
+//   /colonize/attraction f -> distancia de atracción (absoluto)
+//   /colonize/kill       f -> distancia de alcance/kill (absoluto)
+//   /colonize/seg        f -> longitud del segmento de crecimiento (absoluto)
+//
+// Direcciones OSC que ENVÍA (feedback tras cada comando):
+//   /status/mode      s   -> etiqueta del modo activo
+//   /status/playing   i   -> 1 / 0
+//   /status/particles i   -> nº de partículas vivas
+class OscController {
+  OscP5 oscP5;
+  NetAddress remote;
+  InteractionController input;
+
+  OscController(PApplet app, InteractionController input,
+                int listenPort, String remoteIp, int remotePort) {
+    this.input = input;
+    oscP5 = new OscP5(app, listenPort);
+    remote = new NetAddress(remoteIp, remotePort);
+    println("OSC: escuchando en puerto " + listenPort +
+            ", enviando a " + remoteIp + ":" + remotePort);
+  }
+
+  // Procesa un mensaje entrante (lo llama oscEvent() del sketch).
+  void handle(OscMessage msg) {
+    String addr = msg.addrPattern();
+
+    if      (addr.equals("/play"))         input.play();
+    else if (addr.equals("/reset"))        input.reset();
+    else if (addr.equals("/capture"))      input.capturePhoto();
+    else if (addr.equals("/load"))         input.loadImage();
+    else if (addr.equals("/shape"))        input.changeShape();
+    else if (addr.equals("/life"))         input.toggleLife();
+    else if (addr.equals("/background"))   input.cycleBackground();
+    else if (addr.equals("/additive"))     input.toggleAdditive();
+    else if (addr.equals("/dynamicsize"))  input.toggleDynamicSize();
+    else if (addr.equals("/field/toggle")) input.toggleField();
+    else if (addr.equals("/mode"))         input.selectMode(intArg(msg, 0, 1));
+    else if (addr.equals("/speed"))        input.changeSpeed(floatArg(msg, 0, 0));
+    else if (addr.equals("/trailfade"))    input.changeTrailFade(floatArg(msg, 0, 0));
+    else if (addr.equals("/sweep"))        input.sweepDirection(stringArg(msg, 0, "DOWN"));
+    else if (addr.equals("/field"))        field(stringArg(msg, 0, ""));
+    else if (addr.equals("/text"))         input.setText(stringArg(msg, 0, ""));
+    else if (addr.equals("/textcolor"))    input.cycleTextColor();
+    else if (addr.equals("/textbold"))     input.toggleTextBold();
+    else if (addr.equals("/textsize"))     input.changeTextSize(floatArg(msg, 0, 0));
+    else if (addr.equals("/charsizedark"))    input.setCharSizeDark(floatArg(msg, 0, 1.5));
+    else if (addr.equals("/charsizebright"))  input.setCharSizeBright(floatArg(msg, 0, 0.5));
+    else if (addr.equals("/charalphadark"))   input.setCharAlphaDark(floatArg(msg, 0, 255));
+    else if (addr.equals("/charalphabright")) input.setCharAlphaBright(floatArg(msg, 0, 40));
+    else if (addr.equals("/colonize"))            input.setColonizeThreshold(floatArg(msg, 0, 140));
+    else if (addr.equals("/colonize/attraction")) input.setColonizeAttraction(floatArg(msg, 0, 60));
+    else if (addr.equals("/colonize/kill"))       input.setColonizeKill(floatArg(msg, 0, 10));
+    else if (addr.equals("/colonize/seg"))        input.setColonizeSeg(floatArg(msg, 0, 6));
+    else if (addr.equals("/explode"))             input.explosion();
+    else { println("OSC sin asignar: " + addr); return; }
+
+    sendStatus();  // feedback del nuevo estado al controlador remoto
+  }
+
+  void field(String type) {
+    if      (type.equals("noise"))    input.fieldNoise();
+    else if (type.equals("image"))    input.fieldImage();
+    else if (type.equals("radial"))   input.fieldRadial();
+    else if (type.equals("circular")) input.fieldCircular();
+    else if (type.equals("heart"))    input.fieldHeart();
+    else if (type.equals("infinity")) input.fieldInfinity();
+    else if (type.equals("spiral"))   input.fieldSpiral();
+  }
+
+  // Envía el estado actual como feedback (modo, play, nº de partículas).
+  void sendStatus() {
+    send("/status/mode", state.mode.label);
+    send("/status/playing", state.playing ? 1 : 0);
+    send("/status/particles", cluster != null ? cluster.getPixels().size() : 0);
+  }
+
+  void send(String addr, String value) {
+    OscMessage m = new OscMessage(addr);
+    m.add(value);
+    oscP5.send(m, remote);
+  }
+
+  void send(String addr, int value) {
+    OscMessage m = new OscMessage(addr);
+    m.add(value);
+    oscP5.send(m, remote);
+  }
+
+  // Lectura de argumentos con valor por defecto si faltan.
+  int intArg(OscMessage m, int i, int def) {
+    return (m.arguments().length > i) ? m.get(i).intValue() : def;
+  }
+  float floatArg(OscMessage m, int i, float def) {
+    return (m.arguments().length > i) ? m.get(i).floatValue() : def;
+  }
+  String stringArg(OscMessage m, int i, String def) {
+    return (m.arguments().length > i) ? m.get(i).stringValue() : def;
+  }
+}
+
+// ───────────── PixelAtom.pde ─────────────
+
+class PixelAtom {
+  
+  int identifier,
+      w,
+      h;
+      
+  float life,
+        damage,
+        maxSpeed,
+        maxForce,
+        wanderTheta,
+        sweepSpeed, // velocidad propia de caída en el barrido (modo 5, "lluvia")
+        pixHue,    // matiz del píxel original (0..255) — usado por las formas
+        pixSat,    // saturación del píxel original (0..255)
+        pixBright; // brillo del píxel original (0..255)
+
+  PVector position,
+          staticPosition,
+          velocity,
+          acceleration,
+          originalPosition;
+
+  boolean isDebugging,
+          isLiving;
+          
+  color skin,
+        originalSkin,
+        hueColor;    // color de la escala de hue del píxel (forma HUESQUARE)
+
+  char glyph = ' ';  // letra que dibuja la partícula en forma CHAR (ASCII/Matrix)
+  
+  ////////////////////// CONSTRUCTORES ////////////////////
+  PixelAtom() {
+    initPixel();
+  }
+  
+  PixelAtom(int x, int y, int ancho, int alto) {
+    initPixel();
+    position = new PVector(x,y);
+    originalPosition = position.copy();
+    w = ancho;
+    h = alto;
+  }
+  
+  PixelAtom(int x, int y, int ancho, int alto, color col) {
+    initPixel();
+    position = new PVector(x,y);
+    originalPosition = position.copy();
+    w = ancho;
+    h = alto;
+    skin = col;
+    originalSkin = skin;
+    // Datos del píxel para las formas de composición (en colorMode por defecto).
+    pixHue = hue(col);
+    pixSat = saturation(col);
+    pixBright = brightness(col);
+    setGlyphFromBrightness();
+
+    // Color en la escala de hue: matiz del píxel a saturación plena y brillo
+    // según el propio valor de hue (precalculado para la forma HUESQUARE).
+    colorMode(HSB, 255);
+    hueColor = color(pixHue, 255, map(pixHue, 0, 255, 80, 255));
+    colorMode(RGB, 255);
+  }
+
+  // Asigna la letra según el brillo del píxel, formando un degradado ASCII
+  // (oscuro = espacio/poco denso, brillante = denso). Es el glifo por defecto
+  // cuando no se ha fijado un texto.
+  void setGlyphFromBrightness() {
+    String ramp = " .:-=+*#%@";
+    int idx = constrain((int) map(pixBright, 0, 255, 0, ramp.length() - 1), 0, ramp.length() - 1);
+    glyph = ramp.charAt(idx);
+  }
+  
+  void initPixel() {
+    w = 10;
+    h = 10;
+    identifier = floor(random(1,100000));
+    skin = color(random(100,255));
+    originalSkin = skin;
+    position = new PVector(floor(random(width)),floor(random(height)));
+    originalPosition = position.copy();
+    //velocity = new PVector(random(-5, 5), random(-5, 5)).limit(4);
+    velocity = new PVector(random(-5, 5), random(-5, 5)).normalize();
+    acceleration = new PVector(0,0);
+    wanderTheta = 0;
+    life = 100;
+    damage = .1;
+    maxSpeed = 4; //Controla la velocidad maxima del movimiento de las particulas
+    maxForce = 0.5; //Controla la fuerza de atraccion con las demas particulas
+    sweepSpeed = random(1.5, 6.0); // velocidad de caída propia (barrido tipo lluvia)
+    isDebugging = false;
+    isLiving = false;
+  }
+  
+  ///////////////////  API  ////////////////////////
+
+  void seguirTarget(PVector target, String typeBoundaries) {
+    seek(target);
+    actualizar();
+    checkLimits(typeBoundaries);
+    if (isLiving)  {
+      living();
+    }
+    drawPixel();
+  }
+
+  void arrivarTarget(PVector target, float targetRadius, String typeBoundaries) {
+    arrive(target, targetRadius);
+    actualizar();
+    checkLimits(typeBoundaries);
+    if (isLiving)  {
+      living();
+    }
+    drawPixel();
+  }
+  
+  void temblar(float movement, float offset, String typeBoundaries) {
+    
+    PVector newPos = new PVector(staticPosition.x + movement - offset, staticPosition.y);
+    setPosition(newPos);
+    actualizar();
+    checkLimits(typeBoundaries);
+    if (isLiving)  {
+      living();
+    }
+    drawPixel();
+  }
+
+  void pasear(String typeBoundaries) {
+    wander();
+    actualizar();
+    checkLimits(typeBoundaries);
+    if (isLiving)  {
+      living();
+    }
+    drawPixel();
+  }
+
+  // Cae en línea recta hacia 'dir' a 'speed' px/frame (velocidad propia, sin el
+  // tope de maxSpeed), para el barrido tipo lluvia. No usa fuerzas: fija la
+  // velocidad directamente y avanza, envolviendo según los límites.
+  void caer(PVector dir, float speed, String typeBoundaries) {
+    velocity = dir.copy().normalize().mult(speed);
+    position.add(velocity);
+    acceleration.mult(0);
+    checkLimits(typeBoundaries);
+    if (isLiving)  {
+      living();
+    }
+    drawPixel();
+  }
+
+  // Lluvia hacia abajo con vida: cae a 'speed'; al pasar 'deathY' (70% del alto)
+  // empieza a morir, desvaneciéndose (el alfa sigue a la vida) a lo largo de la
+  // franja inferior. Al llegar a vida 0 renace arriba y vuelve a caer.
+  void caerLluvia(float speed, float deathY) {
+    velocity = new PVector(0, speed);
+    position.add(velocity);
+    acceleration.mult(0);
+
+    if (position.y > deathY) {
+      float region = max(1, height - deathY);  // se desvanece en la franja inferior
+      life -= 100.0 * speed / region;
+    }
+    mapLifeToAlpha();
+
+    if (isDead()) {
+      renacer();
+    }
+    drawPixel();
+  }
+
+  // Reaparece por encima del borde superior (x se mantiene) con vida y color
+  // plenos, para volver a caer.
+  void renacer() {
+    position.y = -random(0, height * 0.3);
+    life = 100;
+    skin = originalSkin;
+  }
+
+  void seguirCampo(FlowField campo, String typeBoundaries) {
+    followField(campo);
+    actualizar();
+    checkLimits(typeBoundaries);
+    if (isLiving)  {
+      living();
+    }
+    drawPixel();
+  }
+
+  void manadaSensor(ArrayList<PixelAtom> bolitas, String typeBoundaries) {
+    flock(bolitas);
+    actualizar();
+    checkLimits(typeBoundaries);
+    if (isLiving)  {
+      living();
+    }
+    drawPixel();
+  }
+
+  // Atracción/repulsión hacia un punto (fuerza>0 atrae, fuerza<0 repele).
+  void atraerPunto(PVector punto, float fuerza, String typeBoundaries) {
+    attract(punto, fuerza);
+    actualizar();
+    checkLimits(typeBoundaries);
+    if (isLiving)  {
+      living();
+    }
+    drawPixel();
+  }
+
+  // Giro alrededor de un centro (efecto vórtice).
+  void orbitarPunto(PVector centro, float fuerza, String typeBoundaries) {
+    orbit(centro, fuerza);
+    actualizar();
+    checkLimits(typeBoundaries);
+    if (isLiving)  {
+      living();
+    }
+    drawPixel();
+  }
+
+  // Deriva libre: integra la velocidad actual con fricción, sin nuevas fuerzas.
+  // Se usa tras un impulso (ver impulsar) para que las partículas se dispersen.
+  void derivar(String typeBoundaries) {
+    velocity.mult(0.97);          // fricción suave
+    position.add(velocity);
+    acceleration.mult(0);
+    checkLimits(typeBoundaries);
+    if (isLiving)  {
+      living();
+    }
+    drawPixel();
+  }
+
+  // Da un impulso radial instantáneo desde 'centro' (no dibuja). Lo usa la
+  // animación de explosión al activarse.
+  void impulsar(PVector centro, float fuerza) {
+    PVector dir = PVector.sub(position, centro);
+    if (dir.mag() < 0.001) dir = PVector.random2D();
+    dir.normalize().mult(fuerza);
+    velocity = dir.copy();
+  }
+
+  ////////////////////// DIBUJO ////////////////////
+  // La partícula se dibuja en su posición (que mueve la física) con la forma
+  // global elegida en render.particleShape. Las formas de composición (LINE,
+  // CIRCLE, RECT) usan los datos del píxel (brillo/saturación/matiz), de modo
+  // que las composiciones se animan con el movimiento actual.
+  void drawPixel() {
+    // Factor de tamaño por velocidad (si está activo el tamaño dinámico).
+    float factor = 1.0;
+    if (render != null && render.dynamicSize) {
+      factor = constrain(map(velocity.mag(), 0, maxSpeed, 0.4, 1.6), 0.4, 1.6);
+    }
+
+    ParticleShape shape = (render != null) ? render.particleShape : ParticleShape.SQUARE;
+    switch (shape) {
+      case ELLIPSE:
+        fill(skin);
+        noStroke();
+        ellipse(position.x, position.y, w * factor, h * factor);
+        break;
+
+      case LINE: {
+        // brillo -> longitud (y grosor); saturación -> ángulo.
+        float len = map(pixBright, 0, 255, 1, w * 1.8) * factor;
+        float ang = map(pixSat, 0, 255, 0, TWO_PI);
+        stroke(skin);
+        strokeWeight(map(pixBright, 0, 255, 0.5, 3));
+        pushMatrix();
+        translate(position.x, position.y);
+        rotate(ang);
+        line(-len / 2, 0, len / 2, 0);
+        popMatrix();
+        noStroke();
+        break;
+      }
+
+      case CIRCLE: {
+        // brillo -> radio; saturación -> opacidad.
+        float diam = map(pixBright, 0, 255, 1, w * 1.4) * factor;
+        noStroke();
+        fill(skin, map(pixSat, 0, 255, 60, 255));
+        ellipse(position.x, position.y, diam, diam);
+        break;
+      }
+
+      case RECT: {
+        // brillo -> ancho; saturación -> alto; matiz -> ángulo.
+        float rw = map(pixBright, 0, 255, 2, w * 1.6) * factor;
+        float rh = map(pixSat, 0, 255, 2, w * 1.6) * factor;
+        float ang = map(pixHue, 0, 255, 0, TWO_PI);
+        noStroke();
+        fill(skin);
+        rectMode(CENTER);
+        pushMatrix();
+        translate(position.x, position.y);
+        rotate(ang);
+        rect(0, 0, rw, rh);
+        popMatrix();
+        rectMode(CORNER);
+        break;
+      }
+
+      case CHAR: {
+        // Cada partícula es una letra (estilo ASCII/Matrix), con la tipografía
+        // monoespaciada y el color de texto de render (verde por defecto).
+        // El brillo del píxel modula tamaño y opacidad para que la figura siga
+        // siendo legible aunque las letras vengan de un texto fijo:
+        //   oscuro  -> letra más grande y más opaca
+        //   brillante -> letra más pequeña y más transparente
+        if (render != null && render.monoFont != null) {
+          float sizeF = map(pixBright, 0, 255, render.charSizeDark, render.charSizeBright);
+          textFont(render.activeFont());
+          textAlign(CENTER, CENTER);
+          textSize(w * render.textSizeScale * sizeF * factor);
+          if (render.textUsePixelColor()) {
+            fill(skin);   // cada carácter con el color original de su píxel
+          } else {
+            float a = map(pixBright, 0, 255, render.charAlphaDark, render.charAlphaBright);
+            fill(render.textColor, a);
+          }
+          text(glyph, position.x, position.y);
+        }
+        break;
+      }
+
+      case TRIANGLE: {
+        // Triángulo pequeño; la opacidad depende del brillo del píxel.
+        noStroke();
+        fill(skin, map(pixBright, 0, 255, 30, 255));
+        float s = w * 0.7 * factor;
+        triangle(position.x, position.y - s,
+                 position.x - s, position.y + s,
+                 position.x + s, position.y + s);
+        break;
+      }
+
+      case HUESQUARE:
+        // Cuadrado normal pero coloreado según la escala de hue del píxel.
+        noStroke();
+        fill(hueColor);
+        rect(position.x, position.y, w * factor, h * factor);
+        break;
+
+      case HUECYCLE: {
+        // Cuadrado con hue-shift ANIMADO: cicla el matiz con frameCount
+        // (conserva la saturación y el brillo del píxel), variando de color.
+        float hv = (pixHue + frameCount * 0.5) % 255;
+        noStroke();
+        colorMode(HSB, 255);
+        fill(hv, pixSat, pixBright);
+        colorMode(RGB, 255);
+        rect(position.x, position.y, w * factor, h * factor);
+        break;
+      }
+
+      case SQUARE:
+      default:
+        fill(skin);
+        noStroke();
+        rect(position.x, position.y, w * factor, h * factor);
+        break;
+    }
+  }
+  
+  void drawWander(PVector position, PVector circle, PVector target, float rad) {
+    pushMatrix();
+    stroke(0);
+    fill(255);
+    ellipseMode(CENTER);
+    ellipse(circle.x, circle.y, rad*2, rad*2);
+    ellipse(target.x, target.y, 4, 4);
+    line(position.x, position.y, circle.x, circle.y);
+    line(circle.x, circle.y, target.x, target.y);
+    popMatrix();
+  }
+  
+  void mapLifeToColor() {
+    float r = red(originalSkin);
+    float g = green(originalSkin);
+    float b = blue(originalSkin);
+
+    float newR = map(life, 0, 100, 0, r);
+    float newG = map(life, 0, 100, 0, g);
+    float newB = map(life, 0, 100, 0, b);
+
+    setColor(color(newR, newG, newB));
+  }
+
+  void mapLifeToAlpha() {
+    float a = alpha(originalSkin);
+    float r = red(originalSkin);
+    float g = green(originalSkin);
+    float b = blue(originalSkin);
+    float newAlpha = map(life, 0, 100, 0, a);
+    setColor(color(r, g, b, newAlpha));
+  }
+  
+  /////////////////  VIDA  /////////////////    
+  void living() {
+    lessLife();
+    mapLifeToAlpha();
+  }
+
+  void lessLife() {
+    life -= damage;
+  }
+
+  void moreLife(float health) {
+    life += health;
+  }
+  boolean isDead() {
+    if (life < 0.0) {
+      //String logOut = String.format("La bolita %d ha muerto\n", id);
+      //print(logOut);
+      return true;
+    } else {
+      return false;
+    }
+  }
+  
+  //////////////// Getters && Setters ////////////////
+  void setSize(int wx, int hy) {
+    w = wx;
+    h = hy;
+  }
+
+  void setDamage(float d) {
+    damage = d;
+  }
+
+  void setColor(color c) {
+    skin = c;
+  }
+
+  void setPosition(PVector p) {
+    position = p.copy();
+  }
+  
+  void setMaxSpeed(float speedStep) {
+    maxSpeed += speedStep;
+  }
+
+  float getLife() {
+    return life;
+  }
+  
+  ///////////////// TOOGLE ///////////////// 
+  void saveStaticPosition() {
+    staticPosition = position.copy();
+  }
+  
+  void toogleDebug() {
+    isDebugging = !isDebugging;
+  }
+
+  void toogleLife() {
+    isLiving = !isLiving;
+  }
+  
+  //////////////////   MOVIMIENTO  ////////////////
+  void applyForce(PVector fuerza) {
+    acceleration.add(fuerza);
+  }
+  
+  void actualizar() {
+    velocity.add(acceleration).limit(maxSpeed);
+    position.add(velocity);
+    acceleration.mult(0);
+  }
+  
+  void arrive(PVector objetivo, float distance) {
+    PVector newPos = PVector.sub(objetivo, position);
+    //The distance is the magnitude of the vector pointing from location to target.
+    float d = newPos.mag();
+    newPos.normalize();
+    //If we are closer than 100 pixels...
+    if (d < distance) {
+      //...set the magnitude according to how close we are.
+      float m = map(d, 0, distance, 0, maxSpeed);
+      newPos.mult(m);
+    } else {
+      //Otherwise, proceed at maximum speed.
+      newPos.mult(maxSpeed);
+    }
+
+    //The usual steering = desired - velocity
+    PVector newDir = PVector.sub(newPos, velocity).limit(maxForce);
+    applyForce(newDir);
+  }
+  
+  void seek(PVector objetivo) {
+    PVector newPos = PVector.sub(objetivo, position).normalize().mult(maxSpeed);
+    PVector newDir = PVector.sub(newPos, velocity).limit(maxForce);
+    applyForce(newDir);
+  }
+  
+  PVector seekVector(PVector target) {
+    // A vector pointing from the position to the target
+    PVector desired = PVector.sub(target, position);  
+    desired.normalize().mult(maxSpeed);
+    PVector steer = PVector.sub(desired, velocity).limit(maxForce);  
+    return steer;
+  }
+  
+  // Boids: separación + alineación + cohesión, más una deriva (wander) que
+  // mantiene el movimiento orgánico para que cada partícula se comporte como un
+  // agente autónomo (no se queda quieta ni colapsa en un bloque estático).
+  void flock(ArrayList<PixelAtom> boids) {
+    PVector sep = separate(boids);   // separación (alejarse de los muy cercanos)
+    PVector ali = align(boids);      // alineación (igualar dirección del grupo)
+    PVector coh = cohesion(boids);   // cohesión (acercarse al centro del grupo)
+    PVector wnd = wanderForce();     // deriva orgánica (movimiento autónomo)
+
+    // Pesos: la separación domina para repartir las partículas densas, la
+    // cohesión va más baja para que no se aplasten en un solo punto, y el
+    // wander rompe la simetría y evita que el enjambre se congele.
+    sep.mult(1.8);
+    ali.mult(1.1);
+    coh.mult(0.8);
+    wnd.mult(0.5);
+
+    applyForce(sep);
+    applyForce(ali);
+    applyForce(coh);
+    applyForce(wnd);
+  }
+
+  // Igual que wander() pero devuelve la fuerza de dirección en vez de aplicarla,
+  // para poder combinarla con las otras fuerzas del flock.
+  PVector wanderForce() {
+    float wanderR = 25;   // radio del "círculo de wander"
+    float wanderD = 80;   // distancia del círculo por delante
+    float change = 0.3;
+    wanderTheta += random(-change, change);
+
+    PVector circlepos = velocity.copy();
+    if (circlepos.mag() < 0.001) circlepos = PVector.random2D();
+    circlepos.normalize().mult(wanderD).add(position);
+
+    float h = velocity.heading();
+    PVector offset = new PVector(wanderR * cos(wanderTheta + h),
+                                 wanderR * sin(wanderTheta + h));
+    PVector target = PVector.add(circlepos, offset);
+    return seekVector(target);
+  }
+  
+  void wander() {
+    float wanderR = 25;         // Radius for our "wander circle"
+    float wanderD = 80;         // Distance for our "wander circle"
+    float change = 0.3;
+    wanderTheta += random(-change, change);     // Randomly change wander theta
+
+    // Now we have to calculate the new position to steer towards on the wander circle
+    PVector circlepos = velocity.copy();    // Start with velocity
+    circlepos.normalize();            // Normalize to get heading
+    circlepos.mult(wanderD);          // Multiply by distance
+    circlepos.add(position);               // Make it relative to boid's position
+
+    float h = velocity.heading();        // We need to know the heading to offset wandertheta
+
+    PVector circleOffSet = new PVector(wanderR*cos(wanderTheta+h), wanderR*sin(wanderTheta+h));
+    PVector target = PVector.add(circlepos, circleOffSet);
+    seek(target);
+    //print("\n&d is debugging?\n R: %x",id,isDebugging);
+    if (isDebugging)
+      drawWander(position, circlepos, target, wanderR);
+  }
+  
+  void followField(FlowField campo) {
+    PVector desired = campo.lookup(position);
+    desired.mult(maxSpeed);
+    PVector steer = PVector.sub(desired, velocity);
+    steer.limit(maxForce);
+    applyForce(steer);
+  }
+
+  // Fuerza radial hacia/desde un punto que decae con la distancia.
+  // fuerza > 0 atrae, fuerza < 0 repele. La distancia se acota para evitar
+  // fuerzas enormes (singularidad) cuando la partícula está muy cerca.
+  void attract(PVector punto, float fuerza) {
+    PVector dir = PVector.sub(punto, position);
+    float d = constrain(dir.mag(), 5, 100);
+    dir.normalize();
+    dir.mult(fuerza / d);
+    applyForce(dir);
+  }
+
+  // Fuerza para orbitar 'centro': una componente tangencial (genera el giro)
+  // más una atracción leve hacia el centro (mantiene la órbita cerrada).
+  void orbit(PVector centro, float fuerza) {
+    PVector radial = PVector.sub(position, centro);
+    PVector tangente = new PVector(-radial.y, radial.x); // radial rotado 90°
+    tangente.normalize().mult(fuerza);
+    applyForce(tangente);
+    PVector pull = radial.mult(-0.02);                   // resorte al centro
+    applyForce(pull);
+  }
+  
+  // Separation
+  // Method checks for nearby boids and steers away
+  PVector separate (ArrayList<PixelAtom> boids) {
+    float desiredseparation = 25.0f;
+    PVector steer = new PVector(0, 0, 0);
+    int count = 0;
+    // For every boid in the system, check if it's too close
+    for (PixelAtom other : boids) {
+      float d = PVector.dist(position, other.position);
+      // If the distance is greater than 0 and less than an arbitrary amount (0 when you are yourself)
+      if ((d > 0) && (d < desiredseparation)) {
+        // Calculate vector pointing away from neighbor
+        PVector diff = PVector.sub(position, other.position);
+        diff.normalize();
+        diff.div(d);        // Weight by distance
+        steer.add(diff);
+        count++;            // Keep track of how many
+      }
+    }
+    // Average -- divide by how many
+    if (count > 0) {
+      steer.div((float)count);
+    }
+
+    // As long as the vector is greater than 0
+    if (steer.mag() > 0) {
+      // Implement Reynolds: Steering = Desired - Velocity
+      steer.normalize();
+      steer.mult(maxSpeed);
+      steer.sub(velocity);
+      steer.limit(maxForce);
+    }
+    return steer;
+  }
+
+  // Alignment
+  // For every nearby boid in the system, calculate the average velocity
+  PVector align (ArrayList<PixelAtom> boids) {
+    float neighbordist = 50;
+    PVector sum = new PVector(0, 0);
+    int count = 0;
+    for (PixelAtom other : boids) {
+      float d = PVector.dist(position, other.position);
+      if ((d > 0) && (d < neighbordist)) {
+        sum.add(other.velocity);
+        count++;
+      }
+    }
+    if (count > 0) {
+      sum.div((float)count);
+      sum.normalize();
+      sum.mult(maxSpeed);
+      PVector steer = PVector.sub(sum, velocity);
+      steer.limit(maxForce);
+      return steer;
+    } else {
+      return new PVector(0, 0);
+    }
+  }
+
+  // Cohesion
+  // For the average position (i.e. center) of all nearby boids, calculate steering vector towards that position
+  PVector cohesion (ArrayList<PixelAtom> boids) {
+    float neighbordist = 50;
+    PVector sum = new PVector(0, 0);   // Start with empty vector to accumulate all positions
+    int count = 0;
+    for (PixelAtom other : boids) {
+      float d = PVector.dist(position, other.position);
+      if ((d > 0) && (d < neighbordist)) {
+        sum.add(other.position); // Add position
+        count++;
+      }
+    }
+    if (count > 0) {
+      sum.div(count);
+      return seekVector(sum);  // Steer towards the position
+    } else {
+      return new PVector(0, 0);
+    }
+  }
+  
+  void checkLimits(String type) {
+    type.toUpperCase();
+    switch(type) {
+    case "OTHERSIDE":
+      if (position.x > width) {
+        position.x = 0 + w/2;
+      }
+      if (position.x < 0) {
+        position.x = width - w/2;
+      }
+      if (position.y > height) {
+        position.y = 0 + h/2;
+      }
+      if (position.y < 0) {
+        position.y = height - h/2;
+      }
+      break;
+    case "REVERSE_X":
+      if (position.x > width || position.x < 0) {
+        velocity.x *= -1;
+      }
+      if (position.y > height) {
+        position.y = 0 + h/2;
+      }
+      if (position.y < 0) {
+        position.y = height - h/2;
+      }
+      break;
+    case "REVERSE_Y":
+      if (position.x > width) {
+        position.x = 0 + w/2;
+      }
+      if (position.x < 0) {
+        position.x = width - w/2;
+      }
+      if (position.y > width || position.y < 0) {
+        velocity.y *= -1;
+      }
+      break;
+    case "REVERSE_XY":
+      if (position.x > width || position.x < 0) {
+        velocity.x *= -1;
+      }
+      if (position.y > height || position.y < 0) {
+        velocity.y *= -1;
+      }
+      break;
+
+    default:
+      print("No limits\n");
+      break;
+    }
+  }
+  
+}
+
+// ───────────── PixelCluster.pde ─────────────
+
+import java.util.ArrayList;
+import java.util.Iterator;
+
+class PixelCluster {
+  ArrayList<PixelAtom> cluster = new ArrayList<PixelAtom>();
+  PImage img;
+  int cellSize;       // tamaño de celda con el que se construyó (para comparar)
+  float noiseValue;
+  float noiseStep;
+  float shakeFactor;
+
+  PixelCluster(PImage picture, int cellSize) {
+    this.cellSize = cellSize;
+    picture.loadPixels();
+    for (int y = 0; y < picture.height; y+=cellSize ) {
+      for (int x = 0; x < picture.width; x+=cellSize ) {
+        int loc = x + y*picture.width;
+        //    // The functions red(), green(), and blue() pull out the three color components from a pixel.
+        float r = red(picture.pixels [loc]);
+        float g = green(picture.pixels[loc]);
+        float b = blue(picture.pixels[loc]);
+        float a = alpha(picture.pixels[loc]);
+        //println("Los colores son: ", r,g,b);
+        //PixelAtom pix = new PixelAtom(x, y, cellSize, cellSize, color(r, g, b));
+        //cluster.add(new PixelAtom(x, y, cellSize, cellSize, color(r, g, b)));
+        cluster.add(new PixelAtom(x, y, cellSize, cellSize, color(r, g, b, a)));
+      }
+    }
+    noiseStep = 5;
+    noiseValue = 0;
+    shakeFactor = 100;
+    picture.updatePixels();
+    println("Creando el cluster");
+  }
+
+  void initialPosition() {
+    Iterator<PixelAtom> it = cluster.iterator();
+
+    while (it.hasNext()) {
+      PixelAtom b = it.next();
+      b.arrivarTarget(b.originalPosition, 35, "REVERSE_XY");
+      if (b.isDead()) {
+        it.remove();
+        String logOut = String.format("Bolitas en el cluster: %d\n", cluster.size());
+        print(logOut);
+      }
+    }
+  }
+
+  // Barrido tipo "lluvia": cada partícula cae en la dirección de las flechas a
+  // su PROPIA velocidad (sweepSpeed, aleatoria por partícula), envolviendo en los
+  // bordes (OTHERSIDE). Al variar la velocidad entre partículas, no se ven como
+  // un bloque sino como gotas cayendo escalonadas.
+  void barrerCluster(String barrerMode) {
+    // Solo hacia abajo: lluvia con vida (mueren al pasar el 70% y renacen arriba).
+    if (barrerMode.equals("DOWN")) {
+      float deathY = height * 0.7;
+      for (PixelAtom b : cluster) {
+        b.caerLluvia(b.sweepSpeed, deathY);
+      }
+      return;
+    }
+
+    // Resto de direcciones: caída recta envolviendo en los bordes (sin muerte).
+    PVector dir;
+    switch (barrerMode) {
+      case "LEFT":  dir = new PVector(-1, 0); break;
+      case "RIGHT": dir = new PVector( 1, 0); break;
+      case "UP":    dir = new PVector(0, -1); break;
+      default:      dir = new PVector(0,  1); break;
+    }
+    for (PixelAtom b : cluster) {
+      b.caer(dir, b.sweepSpeed, "OTHERSIDE");
+    }
+  }
+
+  void temblarCluster() {
+    Iterator<PixelAtom> it = cluster.iterator();
+    
+    float aumento = noise(noiseValue)*shakeFactor;
+    while (it.hasNext()) {
+      PixelAtom b = it.next();
+      b.temblar(aumento, shakeFactor/2,  "REVERSE_XY");
+      //b.arrivarTarget(dir,5, "REVERSE_XY");
+      if (b.isDead()) {
+        it.remove();
+        String logOut = String.format("Bolitas en el cluster: %d\n", cluster.size());
+        print(logOut);
+      }
+    }
+    noiseValue += noiseStep;
+  }
+
+  void seguirMouse() {
+    PVector mousePosition = new PVector(mouseX, mouseY);
+    Iterator<PixelAtom> it = cluster.iterator();
+
+    while (it.hasNext()) {
+      PixelAtom b = it.next();
+      b.seguirTarget(mousePosition, "OTHERSIDE");
+      if (b.isDead()) {
+        it.remove();
+        String logOut = String.format("Bolitas en el cluster: %d\n", cluster.size());
+        print(logOut);
+      }
+    }
+  }
+
+  void arrivarMouse() {
+    PVector mousePosition = new PVector(mouseX, mouseY);
+    Iterator<PixelAtom> it = cluster.iterator();
+    //Using an Iterator object instead of counting with int i
+    while (it.hasNext()) {
+      PixelAtom b = it.next();
+      //b.buscarTarget(mousePosition);
+      b.arrivarTarget(mousePosition, 50.0, "OTHERSIDE");
+
+      if (b.isDead()) {
+        it.remove();
+        String logOut = String.format("Bolitas en el cluster: %d\n", cluster.size());
+        print(logOut);
+      }
+    }
+  }
+
+  void deambularCluster(String typeBoundaries) {
+    Iterator<PixelAtom> it = cluster.iterator();
+    //Using an Iterator object instead of counting with int i
+    while (it.hasNext()) {
+      PixelAtom b = it.next();
+      b.pasear(typeBoundaries);
+
+      if (b.isDead()) {
+        it.remove();
+        String logOut = String.format("Bolitas en el cluster: %d\n", cluster.size());
+        print(logOut);
+      }
+    }
+  }
+
+  void atravesarCampo(FlowField campo, String typeBoundaries) {
+    Iterator<PixelAtom> it = cluster.iterator();
+    //Using an Iterator object instead of counting with int i
+    while (it.hasNext()) {
+      PixelAtom b = it.next();
+      b.seguirCampo(campo, typeBoundaries);
+
+      if (b.isDead()) {
+        it.remove();
+        String logOut = String.format("Bolitas en el cluster: %d\n", cluster.size());
+        print(logOut);
+      }
+    }
+  }
+
+
+  // Flock (boids) con grilla espacial: en vez de comparar cada partícula contra
+  // TODAS (O(n²), inviable con miles de partículas), las agrupa en celdas y solo
+  // busca vecinos en la celda propia y las 8 adyacentes. El tamaño de celda
+  // (FLOCK_CELL) es igual al radio de vecindad máximo del flock, así el bloque
+  // 3x3 cubre a todos los vecinos relevantes.
+  final int FLOCK_CELL = 50;
+
+  void manadaCluster(String typeBoundaries) {
+    int gcols = max(1, ceil((float) width / FLOCK_CELL));
+    int grows = max(1, ceil((float) height / FLOCK_CELL));
+
+    // Construye los buckets de la grilla y reparte las partículas.
+    ArrayList<ArrayList<PixelAtom>> buckets = new ArrayList<ArrayList<PixelAtom>>();
+    for (int i = 0; i < gcols * grows; i++) buckets.add(new ArrayList<PixelAtom>());
+    for (PixelAtom b : cluster) {
+      buckets.get(bucketIndex(b, gcols, grows)).add(b);
+    }
+
+    // Reúne vecinos del bloque 3x3 y aplica el flock. Reusa una sola lista de
+    // vecinos (clear) para no generar basura cada frame.
+    ArrayList<PixelAtom> vecinos = new ArrayList<PixelAtom>();
+    Iterator<PixelAtom> it = cluster.iterator();
+    while (it.hasNext()) {
+      PixelAtom b = it.next();
+      int gx = constrain((int) (b.position.x / FLOCK_CELL), 0, gcols - 1);
+      int gy = constrain((int) (b.position.y / FLOCK_CELL), 0, grows - 1);
+
+      vecinos.clear();
+      for (int ox = -1; ox <= 1; ox++) {
+        for (int oy = -1; oy <= 1; oy++) {
+          int nx = gx + ox, ny = gy + oy;
+          if (nx < 0 || ny < 0 || nx >= gcols || ny >= grows) continue;
+          vecinos.addAll(buckets.get(nx + ny * gcols));
+        }
+      }
+
+      b.manadaSensor(vecinos, typeBoundaries);
+      if (b.isDead()) {
+        it.remove();
+        String logOut = String.format("Bolitas en el cluster: %d\n", cluster.size());
+        print(logOut);
+      }
+    }
+  }
+
+  // Índice de bucket (celda) en el que cae la partícula.
+  int bucketIndex(PixelAtom b, int gcols, int grows) {
+    int gx = constrain((int) (b.position.x / FLOCK_CELL), 0, gcols - 1);
+    int gy = constrain((int) (b.position.y / FLOCK_CELL), 0, grows - 1);
+    return gx + gy * gcols;
+  }
+
+  // Atrae (fuerza>0) o repele (fuerza<0) todas las partículas hacia un punto.
+  void atraerCluster(PVector punto, float fuerza, String typeBoundaries) {
+    Iterator<PixelAtom> it = cluster.iterator();
+    while (it.hasNext()) {
+      PixelAtom b = it.next();
+      b.atraerPunto(punto, fuerza, typeBoundaries);
+      if (b.isDead()) {
+        it.remove();
+        String logOut = String.format("Bolitas en el cluster: %d\n", cluster.size());
+        print(logOut);
+      }
+    }
+  }
+
+  // Hace orbitar todas las partículas alrededor de un centro (efecto vórtice).
+  void orbitarCluster(PVector centro, float fuerza, String typeBoundaries) {
+    Iterator<PixelAtom> it = cluster.iterator();
+    while (it.hasNext()) {
+      PixelAtom b = it.next();
+      b.orbitarPunto(centro, fuerza, typeBoundaries);
+      if (b.isDead()) {
+        it.remove();
+        String logOut = String.format("Bolitas en el cluster: %d\n", cluster.size());
+        print(logOut);
+      }
+    }
+  }
+
+  // Da un impulso radial a todas las partículas desde 'centro' (una sola vez).
+  void explotar(PVector centro, float fuerza) {
+    for (PixelAtom b : cluster) {
+      b.impulsar(centro, fuerza);
+    }
+  }
+
+  // Deja que las partículas deriven con su velocidad actual (tras explotar).
+  void derivarCluster(String typeBoundaries) {
+    Iterator<PixelAtom> it = cluster.iterator();
+    while (it.hasNext()) {
+      PixelAtom b = it.next();
+      b.derivar(typeBoundaries);
+      if (b.isDead()) {
+        it.remove();
+        String logOut = String.format("Bolitas en el cluster: %d\n", cluster.size());
+        print(logOut);
+      }
+    }
+  }
+
+  void reset() {
+    for (PixelAtom pixy : cluster) {
+      pixy.setPosition(pixy.originalPosition);
+    }
+  }
+
+  void crecer() {
+    cluster.add(new PixelAtom());
+    String logOut = String.format("Bolitas en el cluster: %d\n", cluster.size());
+    print(logOut);
+  }
+
+  void debugDeambular() {
+    for (int i = 0; i < cluster.size(); i++) {
+      PixelAtom b = cluster.get(i);
+      b.toogleDebug();
+    }
+  }
+
+  void cambiarLifeMode() {
+    for (PixelAtom pix : cluster) {
+      pix.toogleLife();
+    }
+  }
+
+  // Aplica las fuerzas de los repulsores (explosión) a las partículas dentro de
+  // su radio. Solo acumula fuerza (applyForce); la integración la hace luego el
+  // comportamiento activo, así la fuerza se suma a la del modo.
+  void applyRepulsors(ArrayList<Repulsor> rs) {
+    if (rs == null || rs.isEmpty()) return;
+    for (PixelAtom b : cluster) {
+      for (Repulsor r : rs) {
+        if (PVector.dist(b.position, r.pos) < r.radius) {
+          b.attract(r.pos, -r.strength * r.falloff());  // fuerza negativa = repele
+        }
+      }
+    }
+  }
+
+  // Llena cada partícula con una letra del texto (cicla el texto sobre todo el
+  // cluster). Con texto vacío, vuelve al glifo por brillo (ASCII art).
+  void setText(String t) {
+    if (t == null || t.length() == 0) {
+      for (PixelAtom p : cluster) p.setGlyphFromBrightness();
+      return;
+    }
+    int i = 0;
+    for (PixelAtom p : cluster) {
+      p.glyph = t.charAt(i % t.length());
+      i++;
+    }
+  }
+
+  void savePosition() {
+    for (PixelAtom pix : cluster) {
+      pix.saveStaticPosition();
+    }
+  }
+  
+  void changeSpeed(float aumento) {
+    float finalSpeed = 0;
+    for(PixelAtom pix:cluster) {
+      pix.setMaxSpeed(aumento);
+      finalSpeed = pix.maxSpeed;
+    }
+    print("The actual max speed is: ");
+    println(finalSpeed);
+  }
+  
+  ArrayList<PixelAtom> getPixels() {
+    return cluster;
+  }
+}
+
+// ───────────── PixelComposer.pde ─────────────
+
+// Analiza una imagen en una rejilla de PixelData y dibuja composiciones
+// generativas a partir de esos valores (brillo, saturación, matiz, color...).
+//
+// Es el equivalente "generativo" de PixelCluster: en vez de convertir cada
+// celda en una partícula con física, la convierte en un componente gráfico
+// (de momento, una línea) cuyo aspecto depende del análisis del píxel.
+//
+// Para agregar una composición nueva: escribir un método drawX() que recorra
+// `datos` y dibuje algo en función de los campos de PixelData.
+class PixelComposer {
+  ArrayList<PixelData> datos = new ArrayList<PixelData>();
+  int cellSize;
+
+  PixelComposer(PImage img, int cellSize) {
+    this.cellSize = cellSize;
+    img.loadPixels();
+    for (int y = 0; y < img.height; y += cellSize) {
+      for (int x = 0; x < img.width; x += cellSize) {
+        color c = img.pixels[x + y * img.width];
+        // Guarda el centro de la celda como posición del componente.
+        datos.add(new PixelData(x + cellSize / 2.0, y + cellSize / 2.0, c));
+      }
+    }
+    println("Composer: " + datos.size() + " píxeles analizados");
+  }
+
+  // Composición 1 — cada píxel se transforma en una línea:
+  //   brillo     -> longitud de la línea (y grosor)
+  //   saturación -> ángulo de rotación
+  //   color      -> color de la línea
+  void drawLines() {
+    for (PixelData d : datos) {
+      float len = map(d.bright, 0, 255, 1, cellSize * 1.8);
+      float angle = map(d.sat, 0, 255, 0, TWO_PI);
+
+      pushMatrix();
+      translate(d.x, d.y);
+      rotate(angle);
+      stroke(d.col);
+      strokeWeight(map(d.bright, 0, 255, 0.5, 3));
+      line(-len / 2, 0, len / 2, 0);
+      popMatrix();
+    }
+    noStroke();  // restaurar para el resto del dibujo (partículas usan noStroke)
+  }
+
+  // Composición 2 — cada píxel se transforma en un círculo:
+  //   brillo     -> radio del círculo
+  //   saturación -> opacidad (saturado = sólido, apagado = translúcido)
+  //   color      -> relleno del círculo
+  void drawCircles() {
+    noStroke();
+    for (PixelData d : datos) {
+      float diam = map(d.bright, 0, 255, 1, cellSize * 1.4);
+      float alpha = map(d.sat, 0, 255, 60, 255);
+      fill(d.col, alpha);
+      ellipse(d.x, d.y, diam, diam);
+    }
+  }
+
+  // Composición 3 — cada píxel se transforma en un rectángulo (usa los 3
+  // canales HSB):
+  //   brillo     -> ancho
+  //   saturación -> alto
+  //   matiz      -> ángulo de rotación
+  //   color      -> relleno
+  void drawRects() {
+    noStroke();
+    rectMode(CENTER);
+    for (PixelData d : datos) {
+      float w = map(d.bright, 0, 255, 2, cellSize * 1.6);
+      float h = map(d.sat, 0, 255, 2, cellSize * 1.6);
+      float angle = map(d.hue, 0, 255, 0, TWO_PI);
+      pushMatrix();
+      translate(d.x, d.y);
+      rotate(angle);
+      fill(d.col);
+      rect(0, 0, w, h);
+      popMatrix();
+    }
+    rectMode(CORNER);  // restaurar (PixelAtom y el fondo dibujan en CORNER)
+  }
+
+  // Composición 4 — recolorea la imagen desplazando el MATIZ de cada píxel:
+  //   matiz + offset -> nuevo matiz (se conservan saturación y brillo)
+  //   color          -> relleno recoloreado de la celda
+  // El offset suele animarse (ver HueShiftAnimation) para que los colores
+  // recorran el espectro manteniendo la estructura de la imagen.
+  void drawHueShift(float offset) {
+    noStroke();
+    rectMode(CENTER);
+    colorMode(HSB, 255);
+    for (PixelData d : datos) {
+      float newHue = (d.hue + offset) % 255;
+      fill(newHue, d.sat, d.bright);
+      rect(d.x, d.y, cellSize, cellSize);
+    }
+    colorMode(RGB, 255);  // restaurar el colorMode por defecto del sketch
+    rectMode(CORNER);     // restaurar (PixelAtom y el fondo dibujan en CORNER)
+  }
+
+  int size() {
+    return datos.size();
+  }
+}
+
+// ───────────── PixelData.pde ─────────────
+
+// Datos analizados de un píxel/celda muestreado de la imagen.
+//
+// Al capturar la foto o cargar una imagen, cada celda se analiza una vez y
+// guarda su color y sus componentes (RGB + HSB). Esos valores se reutilizan
+// luego para generar composiciones: el brillo puede ser el tamaño de un nuevo
+// componente, la saturación su ángulo, el matiz un desplazamiento de color, etc.
+class PixelData {
+  float x, y;             // posición (centro de la celda) en el canvas
+  color col;              // color original del píxel
+  float r, g, b;          // componentes RGB (0..255)
+  float hue, sat, bright; // componentes HSB (0..255 en colorMode por defecto)
+
+  PixelData(float x, float y, color c) {
+    this.x = x;
+    this.y = y;
+    this.col = c;
+    r = red(c);
+    g = green(c);
+    b = blue(c);
+    hue = hue(c);
+    sat = saturation(c);
+    bright = brightness(c);
+  }
+}
+
+// ───────────── RenderSettings.pde ─────────────
+
+// Modo de fondo: cómo se "limpia" el canvas entre frames, lo que define el
+// efecto de estela (trails) de las partículas.
+enum BackgroundMode {
+  CLEAR,    // se borra por completo cada frame (sin estela)
+  TRAILS,   // velo negro semitransparente -> estelas que se desvanecen
+  PERSIST   // no se borra -> estelas permanentes (se acumula todo)
+}
+
+// Forma con la que se dibuja cada PixelAtom. SQUARE/ELLIPSE son las clásicas;
+// LINE/CIRCLE/RECT son los componentes de las composiciones (usan los datos HSB
+// del píxel); CHAR dibuja una letra (estilo ASCII/Matrix) usando los ajustes de
+// tipografía de RenderSettings.
+enum ParticleShape {
+  SQUARE, ELLIPSE, LINE, CIRCLE, RECT, CHAR, TRIANGLE, HUESQUARE, HUECYCLE
+}
+
+// Ajustes de render: fondo/estelas, mezcla aditiva y tamaño dinámico.
+// Es un objeto global (`render`) que el sketch consulta al dibujar el fondo y
+// que PixelAtom consulta al dibujarse.
+class RenderSettings {
+  BackgroundMode background = BackgroundMode.CLEAR;
+  ParticleShape particleShape = ParticleShape.SQUARE; // forma de las partículas
+  float trailFade = 30;        // alfa del velo en TRAILS (1..255; menor = estela más larga)
+  boolean additive = false;    // mezcla aditiva (ADD): brillo donde se superponen
+  boolean dynamicSize = false; // tamaño de partícula según su velocidad
+
+  // --- Tipografía (forma CHAR / estilo ASCII-Matrix) ---
+  PFont monoFont, monoFontBold; // tipografía monoespaciada (consola), normal y negrita
+  color textColor = #28FF50;    // color por defecto: verde tipo Matrix/consola
+  float textSizeScale = 1.3;    // tamaño de la letra relativo al tamaño de celda
+  boolean textBold = false;     // grosor: alterna entre normal y negrita
+  int textColorIndex = 0;
+  color[] textColors = { #28FF50, #FFB000, #E6E6E6 }; // verde Matrix, ámbar, blanco
+
+  // Modulación de la forma CHAR según el brillo del píxel (rangos ajustables):
+  //   oscuro    -> charSizeDark   (grande) y charAlphaDark   (opaco)
+  //   brillante -> charSizeBright (pequeño) y charAlphaBright (transparente)
+  float charSizeDark   = 1.5;
+  float charSizeBright = 0.5;
+  float charAlphaDark   = 255;
+  float charAlphaBright = 40;
+
+  // Cicla CLEAR -> TRAILS -> PERSIST -> CLEAR.
+  void cycleBackground() {
+    if (background == BackgroundMode.CLEAR)       background = BackgroundMode.TRAILS;
+    else if (background == BackgroundMode.TRAILS) background = BackgroundMode.PERSIST;
+    else                                          background = BackgroundMode.CLEAR;
+  }
+
+  void toggleAdditive()    { additive = !additive; }
+  void toggleDynamicSize() { dynamicSize = !dynamicSize; }
+
+  // Cicla SQUARE -> ELLIPSE -> LINE -> CIRCLE -> RECT -> SQUARE.
+  void cycleParticleShape() {
+    ParticleShape[] shapes = ParticleShape.values();
+    particleShape = shapes[(particleShape.ordinal() + 1) % shapes.length];
+  }
+
+  // ¿El texto usa el color original de cada píxel? (último estado del ciclo)
+  boolean textUsePixelColor() { return textColorIndex >= textColors.length; }
+
+  // Ajusta la intensidad de la estela (solo afecta al modo TRAILS).
+  void changeTrailFade(float delta) {
+    trailFade = constrain(trailFade + delta, 1, 255);
+  }
+
+  // --- Controles de tipografía ---
+  // Cicla los presets (verde/ámbar/blanco) y un modo extra que usa el color
+  // original de cada píxel (ver textUsePixelColor()).
+  void cycleTextColor() {
+    textColorIndex = (textColorIndex + 1) % (textColors.length + 1);
+    if (textColorIndex < textColors.length) textColor = textColors[textColorIndex];
+  }
+
+  void toggleTextBold() { textBold = !textBold; }
+
+  void changeTextSize(float delta) {
+    textSizeScale = constrain(textSizeScale + delta, 0.3, 4.0);
+  }
+
+  // Tipografía activa según el grosor elegido.
+  PFont activeFont() {
+    return (textBold && monoFontBold != null) ? monoFontBold : monoFont;
+  }
+}
+
+// ───────────── Repulsor.pde ─────────────
+
+// Fuerza transitoria tipo explosión: un atractor de fuerza NEGATIVA (repulsor)
+// que se crea al pulsar la tecla en un punto aleatorio de la pantalla. Empuja a
+// las partículas cercanas durante unos frames y se desvanece.
+//
+// Su fuerza se SUMA a la del comportamiento activo: el cluster la aplica
+// (applyForce) antes de que la animación integre la física, así la partícula
+// sigue la trayectoria resultante de la suma de fuerzas. Solo actúa mientras el
+// repulsor está vivo (se crea al pulsar).
+class Repulsor {
+  PVector pos;
+  float strength;     // magnitud de la repulsión
+  float radius;       // radio de influencia
+  int life, maxLife;  // vida en frames (para desvanecer)
+
+  Repulsor(PVector p, float strength, float radius, int life) {
+    this.pos = p.copy();
+    this.strength = strength;
+    this.radius = radius;
+    this.life = life;
+    this.maxLife = life;
+  }
+
+  float falloff() { return maxLife > 0 ? (float) life / maxLife : 0; }
+  void age() { life--; }
+  boolean dead() { return life <= 0; }
+
+  // Feedback visual: anillo que se expande y desvanece.
+  void draw() {
+    noFill();
+    strokeWeight(2);
+    stroke(255, 220 * falloff());
+    float d = radius * (1.4 - 0.4 * falloff());
+    ellipse(pos.x, pos.y, d, d);
+    noStroke();
+  }
+}
+
+// ───────────── SpaceColonization.pde ─────────────
+
+// Algoritmo de colonización de espacios (Runions et al.) en 2D.
+//
+// Las SEMILLAS (raíces) se eligen de los píxeles cuyo brillo supera un umbral
+// ajustable. Desde ahí crece una red ramificada que coloniza el resto de los
+// píxeles (ATRACTORES): en cada iteración, cada atractor atrae al nodo más
+// cercano dentro de `attractionDist`; los nodos influenciados crecen un segmento
+// hacia el promedio de sus atractores; cuando un nodo queda a menos de
+// `killDist` de un atractor, este se "revela" (se dibuja con su color) y se
+// elimina. Así la red coloniza la imagen y la reconstruye al crecer.
+
+class Attractor {
+  PVector pos;
+  color col;
+  Attractor(PVector p, color c) { pos = p.copy(); col = c; }
+}
+
+class GrowthNode {
+  PVector pos;
+  GrowthNode parent;  // para dibujar el segmento (rama)
+  color col;
+  GrowthNode(PVector p, GrowthNode parent, color c) {
+    pos = p.copy();
+    this.parent = parent;
+    this.col = c;
+  }
+}
+
+class SpaceColonization {
+  ArrayList<Attractor> attractors = new ArrayList<Attractor>(); // píxeles por colonizar
+  ArrayList<Attractor> revealed   = new ArrayList<Attractor>(); // ya alcanzados (se dibujan)
+  ArrayList<GrowthNode> nodes     = new ArrayList<GrowthNode>(); // red de crecimiento
+
+  float attractionDist = 60;  // distancia a la que un atractor influye en un nodo
+  float killDist = 10;        // distancia a la que el atractor se da por alcanzado
+  float segLength = 6;        // longitud de cada segmento de crecimiento
+  int maxNodes = 60000;       // tope de seguridad
+  int cell = 12;              // tamaño con el que se dibujan los píxeles revelados
+
+  SpaceColonization(PixelComposer comp, float threshold,
+                    float attraction, float kill, float seg) {
+    attractionDist = attraction;
+    killDist = kill;
+    segLength = seg;
+    if (comp == null) return;
+    cell = comp.cellSize;
+
+    PixelData brightest = null;
+    for (PixelData d : comp.datos) {
+      if (brightest == null || d.bright > brightest.bright) brightest = d;
+      PVector p = new PVector(d.x, d.y);
+      if (d.bright >= threshold) {
+        // Semilla: nodo raíz, y se revela de entrada.
+        nodes.add(new GrowthNode(p, null, d.col));
+        revealed.add(new Attractor(p, d.col));
+      } else {
+        attractors.add(new Attractor(p, d.col));
+      }
+    }
+
+    // Si el umbral fue tan alto que no quedó ninguna semilla, usa el píxel más
+    // brillante para que el crecimiento pueda arrancar igualmente.
+    if (nodes.isEmpty() && brightest != null) {
+      PVector p = new PVector(brightest.x, brightest.y);
+      nodes.add(new GrowthNode(p, null, brightest.col));
+      revealed.add(new Attractor(p, brightest.col));
+    }
+
+    // Revela los atractores que ya nacen pegados a una semilla.
+    killReachedBy(nodes);
+  }
+
+  boolean done() {
+    return attractors.isEmpty() || nodes.size() >= maxNodes;
+  }
+
+  // Una iteración del algoritmo.
+  void grow() {
+    if (done()) return;
+
+    // 1) Cada atractor influye en el nodo más cercano dentro de attractionDist.
+    HashMap<GrowthNode, PVector> dirs = new HashMap<GrowthNode, PVector>();
+    for (Attractor a : attractors) {
+      GrowthNode nearest = null;
+      float best = attractionDist;
+      for (GrowthNode n : nodes) {
+        float dd = PVector.dist(a.pos, n.pos);
+        if (dd < best) { best = dd; nearest = n; }
+      }
+      if (nearest != null) {
+        PVector dir = PVector.sub(a.pos, nearest.pos).normalize();
+        if (!dirs.containsKey(nearest)) dirs.put(nearest, new PVector());
+        dirs.get(nearest).add(dir);
+      }
+    }
+
+    // 2) Crea un nodo nuevo por cada nodo influenciado, hacia el promedio.
+    ArrayList<GrowthNode> nuevos = new ArrayList<GrowthNode>();
+    for (GrowthNode n : dirs.keySet()) {
+      PVector dir = dirs.get(n);
+      if (dir.mag() == 0) continue;
+      dir.normalize().mult(segLength);
+      nuevos.add(new GrowthNode(PVector.add(n.pos, dir), n, n.col));
+    }
+    nodes.addAll(nuevos);
+
+    // 3) Revela los atractores alcanzados por los nodos nuevos.
+    killReachedBy(nuevos);
+  }
+
+  // Mueve a `revealed` los atractores que estén a menos de killDist de algún
+  // nodo de la lista dada.
+  void killReachedBy(ArrayList<GrowthNode> checkNodes) {
+    Iterator<Attractor> it = attractors.iterator();
+    while (it.hasNext()) {
+      Attractor a = it.next();
+      for (GrowthNode n : checkNodes) {
+        if (PVector.dist(a.pos, n.pos) < killDist) {
+          revealed.add(a);
+          it.remove();
+          break;
+        }
+      }
+    }
+  }
+
+  void draw() {
+    // Ramas (la estructura de crecimiento), coloreadas con el píxel de origen.
+    strokeWeight(1);
+    for (GrowthNode n : nodes) {
+      if (n.parent != null) {
+        stroke(n.col);
+        line(n.parent.pos.x, n.parent.pos.y, n.pos.x, n.pos.y);
+      }
+    }
+    // Píxeles revelados: reconstruyen la imagen.
+    noStroke();
+    for (Attractor a : revealed) {
+      fill(a.col);
+      ellipse(a.pos.x, a.pos.y, cell, cell);
+    }
+  }
+}
+2:["$","$L7",null,{"slug":"atomos-pixel","code":"$8"}]

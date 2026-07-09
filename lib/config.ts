@@ -37,3 +37,10 @@ export const SKETCH_IMAGE_BASE =
 export function sketchImageUrl(slug: string): string {
   return `${SKETCH_IMAGE_BASE}/${slug}.png`;
 }
+
+/**
+ * Mazorca que brota de los nodos superiores de la milpa (PNG 1024×1024 con
+ * fondo transparente; el olote apunta hacia abajo-izquierda).
+ */
+export const MAZORCA_IMAGE_URL =
+  "https://amazons3-images-micel10.s3.us-east-2.amazonaws.com/images/gallery/mazorca.png";

@@ -18,6 +18,9 @@ const neon = {
   orange: "#ff8c1a",
   amber: "#ffae42",
   ember: "#ff6a00",
+  // Morados: acento puntual exclusivo de las flores del frijol de la milpa.
+  violet: "#a855f7",
+  orchid: "#c98bff",
 };
 
 const config: Config = {
