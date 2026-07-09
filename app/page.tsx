@@ -1,3 +1,4 @@
+import EscenaParallax from "@/components/EscenaParallax";
 import GalleryHeader from "@/components/GalleryHeader";
 import MilpaFrijol from "@/components/MilpaFrijol";
 import MilpaLeaf from "@/components/MilpaLeaf";
@@ -30,6 +31,10 @@ export default function Home() {
 
   return (
     <>
+      {/* Valle de la Milpa: fondo parallax fijo (cielo/montaña, árboles,
+          milpa cercana, llovizna/fauna) que reacciona al scroll, la hora y
+          el clima. Vive detrás de todo con z-index negativo. */}
+      <EscenaParallax />
       <GalleryHeader />
       <main className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-10 sm:px-6 sm:py-16">
         <header className="flex flex-col gap-4">

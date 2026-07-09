@@ -6,8 +6,14 @@
   color-scheme: dark;
 }
 
+/* El fondo opaco vive SOLO en html: si también lo tuviera body, taparía la
+   escena parallax fija con z-index negativo de la landing. Además es el
+   fallback mientras p5 carga (y el fondo de las páginas sin escena). */
+html {
+  background-color: theme("colors.fondo");
+}
+
 html,
 body {
-  background-color: theme("colors.fondo");
   color: theme("colors.crema");
 }
