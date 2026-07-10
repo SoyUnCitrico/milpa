@@ -16,7 +16,58 @@ import type { SketchFactory } from "../types";
  * flujo se calcula inline como un arreglo de vectores (no requiere una clase
  * `Flowfield`). Se reemplaza `p5.Vector.fromAngle(a)` por
  * `createVector(cos(a), sin(a))` para no depender del constructor de p5.
+ *
+ * Rediseño de paleta/interacción (a diferencia del original, que creaba las
+ * 300 partículas idénticas en azul plano sobre fondo blanco):
+ * - Paleta propia (violeta-magenta-cian neón) sobre fondo casi negro, elegida
+ *   para que el efecto de deriva de color siga leyéndose como un gradiente
+ *   frío/cyberpunk en vez del azul plano original.
+ * - El color de cada partícula se elige con `p.randomGaussian` centrada en el
+ *   índice medio de `PALETA.colores` (el violeta profundo), así la mayoría
+ *   cae cerca del centro de la paleta y menos partículas hacia los extremos
+ *   cian/magenta. Se usa reflejo (no recorte/clamp directo) para no acumular
+ *   partículas artificialmente en los bordes del arreglo.
+ * - El tamaño real visible en modo "estela" es el grosor del trazo (4º
+ *   argumento del constructor, mapeado a `this.stroke`); `size` (3er arg) no
+ *   se usa en este modo de dibujo. Se hace variar ambos con una gaussiana
+ *   angosta alrededor de un valor base, para que el "tamaño ligeramente
+ *   distinto" pedido se note en el grosor real de la estela.
+ * - `derivaColor()` (en `bibliotecas/particula.ts`) desplazaba r/g/b sin tope
+ *   (0.1/-0.1 por frame): con el tiempo TODAS las partículas convergían al
+ *   mismo amarillo (r,g se saturan en 255, b llega a 0), sin importar su color
+ *   inicial de paleta — diluía por completo la paleta elegida en menos de un
+ *   minuto. Se redujo la tasa a una décima parte (ver comentario en
+ *   `particula.ts`) para que la identidad de color de cada partícula dure
+ *   varios minutos antes de derivar; se conserva el efecto de deriva orgánica
+ *   (no se eliminó), solo se ralentizó.
+ * - Interacción de mouse (antes inexistente): el cursor actúa como
+ *   atractor/repulsor continuo sobre las partículas cercanas (radio limitado),
+ *   reutilizando `part.applyForce()` ya expuesto por `Particle` — sin mecanismo
+ *   paralelo. Un clic invierte el modo atracción↔repulsión.
  */
+
+/** Paleta del sketch — ajustar aquí sin tocar la lógica de dibujo. */
+const PALETA = {
+  fondo: "#07030f", // negro azul-violeta profundo, casi puro
+  // Extremo frío (cian) → centro (violeta profundo) → extremo cálido (rosa neón).
+  // El centro del arreglo es el color con más probabilidad de asignarse.
+  colores: ["#22d3ee", "#3b82f6", "#7c3aed", "#c026d3", "#ec4899"],
+};
+
+/** Config de tamaño/grosor de trazo — variación pequeña alrededor de una base. */
+const CONFIG_PARTICULAS = {
+  grosorBase: 2.5,
+  grosorDesviacion: 0.6,
+  grosorMin: 1,
+  grosorMax: 5,
+};
+
+/** Config de la interacción de mouse (atractor/repulsor local). */
+const CONFIG_MOUSE = {
+  radio: 150,
+  fuerzaMax: 0.6,
+};
+
 export const generativoParticulas: SketchFactory = (p: p5) => {
   const inc = 0.1;
   const scl = 10;
@@ -27,6 +78,30 @@ export const generativoParticulas: SketchFactory = (p: p5) => {
   const particles: Particle[] = [];
   let flowfield: p5.Vector[] = [];
 
+  // Vector reutilizado para la fuerza del mouse: evita crear un p5.Vector
+  // nuevo por partícula en cada frame (300 partículas × 60fps).
+  const fuerzaMouse = p.createVector(0, 0);
+  // true = el cursor atrae a las partículas cercanas; false = las repele.
+  // Se invierte con un clic (ver mousePressed).
+  let atrae = true;
+
+  /**
+   * Elige un índice de `PALETA.colores` con distribución gaussiana centrada
+   * en el color medio del arreglo. Si la muestra cae fuera de rango se
+   * refleja (espejo) en vez de recortarla, para no acumular partículas en
+   * los índices extremos.
+   */
+  const indiceColorGaussiano = () => {
+    const maxIndice = PALETA.colores.length - 1;
+    const media = maxIndice / 2;
+    const desviacion = PALETA.colores.length / 6;
+    let idx = p.randomGaussian(media, desviacion);
+    if (idx < 0) idx = -idx;
+    if (idx > maxIndice) idx = 2 * maxIndice - idx;
+    idx = p.constrain(idx, 0, maxIndice);
+    return Math.round(idx);
+  };
+
   p.setup = () => {
     p.createCanvas(600, 600);
     cols = p.floor(p.width / scl);
@@ -35,10 +110,17 @@ export const generativoParticulas: SketchFactory = (p: p5) => {
 
     for (let i = 0; i < 300; i++) {
       const pos = p.createVector(p.random(250, 350), p.random(250, 350));
-      // size no se usa en la estela; el 4º arg (stroke) es el grosor del trazo.
-      particles[i] = new Particle(p, pos, 5, p.random(1, 5), "estela", "#0000ff");
+      const grosor = p.constrain(
+        p.randomGaussian(CONFIG_PARTICULAS.grosorBase, CONFIG_PARTICULAS.grosorDesviacion),
+        CONFIG_PARTICULAS.grosorMin,
+        CONFIG_PARTICULAS.grosorMax,
+      );
+      const color = PALETA.colores[indiceColorGaussiano()];
+      // size (3er arg) no se usa en el modo "estela"; se le pasa el mismo
+      // grosor por consistencia si el modo de dibujo cambiara más adelante.
+      particles[i] = new Particle(p, pos, grosor, grosor, "estela", color);
     }
-    p.background(255);
+    p.background(PALETA.fondo);
   };
 
   p.draw = () => {
@@ -68,12 +150,30 @@ export const generativoParticulas: SketchFactory = (p: p5) => {
       if (force) {
         part.follow(force);
       }
+
+      // Atractor/repulsor local del mouse: solo actúa dentro de `radio`, con
+      // intensidad decreciente hacia el borde del radio de influencia.
+      const dx = p.mouseX - part.pos.x;
+      const dy = p.mouseY - part.pos.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq > 0.01 && distSq < CONFIG_MOUSE.radio * CONFIG_MOUSE.radio) {
+        const dist = p.sqrt(distSq);
+        const intensidad = p.map(dist, 0, CONFIG_MOUSE.radio, CONFIG_MOUSE.fuerzaMax, 0);
+        const signo = atrae ? 1 : -1;
+        fuerzaMouse.set((dx / dist) * intensidad * signo, (dy / dist) * intensidad * signo);
+        part.applyForce(fuerzaMouse);
+      }
+
       part.update();
       part.derivaColor();
       part.rebote();
       part.show("estela");
       part.updateRgb();
     }
+  };
+
+  p.mousePressed = () => {
+    atrae = !atrae;
   };
 
   p.keyPressed = () => {

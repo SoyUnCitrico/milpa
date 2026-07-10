@@ -6,6 +6,7 @@ import MilpaHoja from "@/components/MilpaHoja";
 import MilpaMazorca from "@/components/MilpaMazorca";
 import MilpaPistilos from "@/components/MilpaPistilos";
 import MilpaRaices from "@/components/MilpaRaices";
+import NeblinaReveal from "@/components/NeblinaReveal";
 import SketchCard from "@/components/SketchCard";
 import { createRng } from "@/lib/milpa/random";
 import { sketches } from "@/lib/sketches";
@@ -31,7 +32,7 @@ export default function Home() {
   const filasConMazorca = new Set(candidatas.slice(0, Math.min(3, filasSuperiores)));
 
   return (
-    <div className={ `animation-fog` }>
+    <NeblinaReveal>
       {/* Valle de la Milpa: fondo parallax fijo (cielo/montaña, árboles,
           milpa cercana, llovizna/fauna) que reacciona al scroll, la hora y
           el clima. Vive detrás de todo con z-index negativo. */}
@@ -91,6 +92,6 @@ export default function Home() {
           {sketches.length === 1 ? "" : "s"} en la galería.
         </footer>
       </main>
-    </div>
+    </NeblinaReveal>
   );
 }

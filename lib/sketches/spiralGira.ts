@@ -13,7 +13,26 @@ import type { SketchFactory } from "../types";
  * Los globales del original viven como variables de clausura; se elimina el
  * `.parent('mainContainer')` (el wrapper monta el canvas) y los `keyPressed`
  * originales (estaban comentados, sólo llamaban a `saveFrames`).
+ *
+ * La capa `petalos` usa el nuevo tipo de dibujo `"petalo"` de
+ * `Particle.show()` (ver `lib/bibliotecas/particula.ts`) en vez de `"square"`:
+ * mismo mecanismo de `Spiral` (partículas rotadas a su ángulo polar), pero con
+ * una forma de gota alargada que se lee como pétalo real.
+ *
+ * Paleta: los tonos originales (dorado/marrón/naranja quemado sobre cielo
+ * pastel) ya tenían identidad cálida propia — se empujan a un duotono más
+ * saturado/oscuro (atardecer ember casi negro) sin copiar la variante violeta
+ * de `girasol.ts`, para que cada pieza conserve su propia identidad.
  */
+/** Paleta del sketch — ajustar aquí sin tocar la lógica de dibujo. */
+const PALETA = {
+  fondo: "#1a0605", // antes rgba(146,182,228,1) (cielo pastel día) → atardecer ember casi negro
+  centro: "#9c4816", // antes #824B27, empujado a marrón-ember más saturado
+  contorno: "#120608", // antes #0e060fff, casi negro con tinte ember (fill de corona + base del contorno de pétalos)
+  semillas: "#e0630f", // antes #C86D18, empujado a naranja-ember vívido
+  dorado: "#ffbe3d", // antes #E7A014, empujado a ámbar-dorado más brillante (stroke de corona/semillas, fill de pétalos)
+};
+
 export const spiralGira: SketchFactory = (p: p5) => {
   const ciclos = 24.45;
   const numParticulas = 400;
@@ -41,18 +60,26 @@ export const spiralGira: SketchFactory = (p: p5) => {
   let cicsPetalos = 1;
   const dirCicsPet = 0.01;
 
-  const colorS = "#E7A014";
-  const color1 = "#824B27";
-  const color2 = "#0e060fff";
-  const color3 = "#C86D18";
-  const colorFondo = "rgba(146, 182, 228, 1)";
+  // Contorno translúcido de los pétalos: mismo tono que `PALETA.contorno`,
+  // con alfa bajo (20%, "33" en hex) para un borde sutil.
+  const contornoPetalo = `${PALETA.contorno}33`;
 
   let centro: Spiral, corona: Spiral, semillas: Spiral, petalos: Spiral;
+  // Componentes RGB del fondo, derivados una sola vez en setup (igual que
+  // `Particle` deriva r/g/b de un color hex) para reutilizarlos en el
+  // `background(...)` translúcido de cada frame en `draw()`.
+  let fondoR = 0,
+    fondoG = 0,
+    fondoB = 0;
 
   p.setup = () => {
     p.frameRate(30);
     p.createCanvas(1080, 1080);
-    p.background(colorFondo);
+    p.background(PALETA.fondo);
+    const fondoColor = p.color(PALETA.fondo);
+    fondoR = p.red(fondoColor);
+    fondoG = p.green(fondoColor);
+    fondoB = p.blue(fondoColor);
 
     centro = new Spiral(
       p,
@@ -64,7 +91,7 @@ export const spiralGira: SketchFactory = (p: p5) => {
       particleSize,
       particleStroke,
       "square",
-      color1,
+      PALETA.centro,
     );
 
     corona = new Spiral(
@@ -77,8 +104,8 @@ export const spiralGira: SketchFactory = (p: p5) => {
       particleSize * 2.4,
       0,
       particleType,
-      color2,
-      colorS,
+      PALETA.contorno,
+      PALETA.dorado,
     );
 
     semillas = new Spiral(
@@ -91,8 +118,8 @@ export const spiralGira: SketchFactory = (p: p5) => {
       particleSize * 2,
       0,
       "circle",
-      color3,
-      colorS,
+      PALETA.semillas,
+      PALETA.dorado,
     );
 
     petalos = new Spiral(
@@ -104,16 +131,16 @@ export const spiralGira: SketchFactory = (p: p5) => {
       35,
       particleSize * 10,
       2,
-      "square",
-      colorS,
-      "#0e060f33",
+      "petalo",
+      PALETA.dorado,
+      contornoPetalo,
     );
 
     p.smooth();
   };
 
   p.draw = () => {
-    p.background(146, 182, 228, 10);
+    p.background(fondoR, fondoG, fondoB, 10);
 
     corona.update();
     centro.update();

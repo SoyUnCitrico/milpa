@@ -2,9 +2,29 @@ import type p5 from "p5";
 import type { SketchFactory } from "../types";
 
 /**
+ * Paleta en HSB (360, 100, 100, 100) — el colorMode nativo del sketch.
+ * Identidad verde/vino conservada, re-mapeada hacia los tonos del sitio sin
+ * copiar tokens literalmente: la mitad fría corre el verde-amarillo original
+ * al verde matrix pálido, la mitad cálida mantiene el matiz vino pero más
+ * saturado sobre un fondo empujado a casi negro. El remate salta del
+ * chartreuse al verde neón para leerse como acento.
+ */
+const PALETA = {
+  fondo: [295, 68, 13] as [number, number, number], // antes (290, 59, 31): mismo matiz vino-violeta, casi negro
+  vino: [332, 88, 78] as [number, number, number], // antes (332, 78, 64): mismo matiz, más saturado/brillante
+  verde: [137, 40, 100] as [number, number, number], // antes (88, 22, 100): corrido al verde matrix pálido
+  remate: [135, 100, 100] as [number, number, number], // antes (75, 100, 100): chartreuse → verde neón
+};
+
+/**
  * Port en modo instancia de `creativeCode/rev2.js`.
- * Variante coloreada de `revolution` en HSB con paleta verde/vino; termina con
- * `noLoop()` al completar la vuelta y remata con una franja de líneas.
+ *
+ * Variante de la familia "Revolución" (ver `algorithms.md`): dos ángulos
+ * contrarrotantes tejen líneas con opacidad y grosor modulados por ruido
+ * Perlin, acumuladas sobre fondo persistente. Mitad vino (línea entre órbita
+ * chica deformada y órbita grande) y mitad verde (línea desde el centro);
+ * termina con `noLoop()` al completar la vuelta y remata con una franja de
+ * líneas rotada (`cuadrados()`).
  */
 export const rev2: SketchFactory = (p: p5) => {
   let x: number, y: number, a: number, b: number;
@@ -15,19 +35,10 @@ export const rev2: SketchFactory = (p: p5) => {
   let stepAngle: number;
   let radio: number, radioChico: number;
 
-  let verde1: p5.Color, verde2: p5.Color;
-  let vino2: p5.Color, vino3: p5.Color;
-
   p.setup = () => {
     p.createCanvas(1000, 1000);
     p.colorMode(p.HSB, 360, 100, 100, 100);
-
-    verde1 = p.color(88, 22, 100);
-    verde2 = p.color(75, 100, 100);
-
-    vino2 = p.color(332, 78, 64);
-    vino3 = p.color(290, 59, 31);
-    p.background(vino3);
+    p.background(...PALETA.fondo);
 
     radioChico = p.width * 0.12;
     radio = p.width * 0.45;
@@ -47,18 +58,20 @@ export const rev2: SketchFactory = (p: p5) => {
   function paisaje() {
     p.push();
     p.translate(p.width / 2, p.height / 2);
+    const ruidoVino = p.noise(indexVino);
+    const ruidoVerde = p.noise(index);
     x = radio * p.cos(angle2);
     y = radio * p.sin(angle2);
     a = radioChico * p.cos(angle);
-    b = radioChico * p.noise(indexVino) * p.sin(angle);
-    p.strokeWeight(1);
+    b = radioChico * ruidoVino * p.sin(angle);
     if (angle2 <= p.PI) {
-      vino2.setAlpha(p.noise(indexVino) * 30 + 10);
-      p.stroke(vino2);
+      // El ruido se expone también como grosor del trazo (antes fijo en 1).
+      p.strokeWeight(0.4 + ruidoVino * 1.6);
+      p.stroke(...PALETA.vino, ruidoVino * 30 + 10);
       p.line(a, b, x, y);
     } else {
-      verde1.setAlpha(p.noise(index) * 70 + 20);
-      p.stroke(verde1);
+      p.strokeWeight(0.4 + ruidoVerde * 1.4);
+      p.stroke(...PALETA.verde, ruidoVerde * 70 + 20);
       p.line(0, 0, x, y);
     }
     p.pop();
@@ -77,8 +90,8 @@ export const rev2: SketchFactory = (p: p5) => {
     p.push();
     p.translate(p.width / 2 - 1.5 * lado, p.height / 2);
     p.rotate(p.PI * 1.75);
+    p.stroke(...PALETA.remate);
     for (let yy = 0; yy <= 40; yy += 2) {
-      p.stroke(verde2);
       p.strokeWeight(str);
       p.line(yy * 4, 0, yy * 4, lado * 2);
       str -= 0.5;
@@ -86,7 +99,9 @@ export const rev2: SketchFactory = (p: p5) => {
     p.pop();
   }
 
-  p.keyTyped = () => {
-    if (p.key === "s") p.saveCanvas("rev", "png");
+  p.keyPressed = () => {
+    if (p.key === "s" || p.key === "S") {
+      p.saveCanvas("rev2", "png");
+    }
   };
 };

@@ -141,6 +141,23 @@ export class Particle {
       case "square":
         p.rect(0, 0, this.size * 1, this.size);
         break;
+      case "petalo": {
+        // Pétalo alargado apuntando hacia afuera a lo largo del eje local +y:
+        // `Spiral` ya rota la partícula a su ángulo polar antes de llamar a
+        // `show()`, así que basta con dibujar la forma "hacia arriba" desde el
+        // origen para que quede orientada radialmente. Base angosta en (0,0)
+        // (punto de inserción), dos curvas bezier simétricas que abren al
+        // ancho máximo hacia la mitad del largo y cierran redondeado en la
+        // punta (0, largo) — perfil clásico de pétalo tipo gota.
+        const largo = this.size * 1.6;
+        const ancho = this.size * 0.55;
+        p.beginShape();
+        p.vertex(0, 0);
+        p.bezierVertex(ancho, largo * 0.15, ancho * 0.85, largo * 0.85, 0, largo);
+        p.bezierVertex(-ancho * 0.85, largo * 0.85, -ancho, largo * 0.15, 0, 0);
+        p.endShape(p.CLOSE);
+        break;
+      }
       case "line":
         p.line(this.pos.x, this.pos.y, this.prevPos.x, this.prevPos.y);
         this.updatePrev();
@@ -204,12 +221,19 @@ export class Particle {
   /**
    * Deriva de color/alfa por frame para la estela de `generativoParticulas`:
    * el trazo se desvanece (alpha baja) y el tono se desplaza lentamente.
+   *
+   * Tasa reducida a una décima parte del valor original (0.1/-0.1 → 0.01/-0.01):
+   * sin tope, el desplazamiento original saturaba r/g en 255 y llevaba b a 0 en
+   * menos de un minuto, convergiendo TODAS las partículas al mismo amarillo sin
+   * importar su color inicial — diluía por completo cualquier paleta asignada
+   * (ver `generativoParticulas.ts`). Se conserva el efecto de deriva orgánica,
+   * solo más lento, para que la identidad de color de cada partícula dure.
    */
   derivaColor() {
     this.alpha -= 0.08;
-    this.r += 0.1;
-    this.g += 0.1;
-    this.b -= 0.1;
+    this.r += 0.01;
+    this.g += 0.01;
+    this.b -= 0.01;
   }
 
   /**

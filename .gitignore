@@ -17,5 +17,8 @@ next-env.d.ts
 *.log
 .env*.local
 
-
+CLAUDE.md
 DEPLOY.md
+
+/.claude/
+algorithms.md
