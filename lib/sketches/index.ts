@@ -377,28 +377,6 @@ export const sketches: SketchEntry[] = [
   },
   {
     meta: {
-      slug: "delay3",
-      title: "Delay III",
-      author: "mdrn.mx",
-      source: "creativeCode/delay3.js",
-      image: `${baseImage}delay3.png`,
-      description: "Escena audiovisual sobre el fundido de fondo original (negro → vino profundo en HSB): al tocar el canvas suena una campana FM (VCO FM → VCF pasa-banda resonante → VCA con envolvente AD percusiva → ping-pong delay) y se dibuja un círculo verde al centro; luego cada rebote del delay agrega un rombo de otro color a los lados, alternado como el ping-pong. Dos knobs inferiores controlan el tiempo y el feedback del delay: la opacidad de los rombos sigue el volumen del feedback y tiende a 0 cuanto más tardado es el eco. Retriggerear limpia y redibuja todo. Migrado a Tone.js.",
-      tags: ["audio", "síntesis FM", "campana", "delay ping-pong", "Tone.js", "HSB", "interactivo"],
-      controls: [
-        { key: "clic", action: "Dispara la campana FM, limpia la escena y redibuja el círculo + los ecos (activa el audio)." },
-        { key: "Delay time", action: "Knob: tiempo entre rebotes del ping-pong (y momento de aparición de cada rombo)." },
-        { key: "Feedback", action: "Knob: realimentación del delay (nº y opacidad de los rombos)." },
-        { key: "s", action: "Guardar el canvas como PNG (saveCanvas)." },
-      ],
-      needsAudio: true,
-      motorAudio: "tone",
-      width: 1000,
-      height: 1000,
-    },
-    factory: delay3,
-  }, 
-  {
-    meta: {
       slug: "sumador",
       title: "Sumador de Fourier",
       author: "mndrn.mx",
@@ -457,6 +435,28 @@ export const sketches: SketchEntry[] = [
     },
     factory: audioGraf,
   },
+  {
+    meta: {
+      slug: "delay3",
+      title: "Delay III",
+      author: "mdrn.mx",
+      source: "creativeCode/delay3.js",
+      image: `${baseImage}delay3.png`,
+      description: "Escena audiovisual sobre el fundido de fondo original (negro → vino profundo en HSB): al tocar el canvas suena una campana FM (VCO FM → VCF pasa-banda resonante → VCA con envolvente AD percusiva → ping-pong delay) y se dibuja un círculo verde al centro; luego cada rebote del delay agrega un rombo de otro color a los lados, alternado como el ping-pong. Dos knobs inferiores controlan el tiempo y el feedback del delay: la opacidad de los rombos sigue el volumen del feedback y tiende a 0 cuanto más tardado es el eco. Retriggerear limpia y redibuja todo. Migrado a Tone.js.",
+      tags: ["audio", "síntesis FM", "campana", "delay ping-pong", "Tone.js", "HSB", "interactivo"],
+      controls: [
+        { key: "clic", action: "Dispara la campana FM, limpia la escena y redibuja el círculo + los ecos (activa el audio)." },
+        { key: "Delay time", action: "Knob: tiempo entre rebotes del ping-pong (y momento de aparición de cada rombo)." },
+        { key: "Feedback", action: "Knob: realimentación del delay (nº y opacidad de los rombos)." },
+        { key: "s", action: "Guardar el canvas como PNG (saveCanvas)." },
+      ],
+      needsAudio: true,
+      motorAudio: "tone",
+      width: 1000,
+      height: 1000,
+    },
+    factory: delay3,
+  }, 
   {
     meta: {
       slug: "synth",

@@ -9,10 +9,10 @@ const HEIGHT = 150;
 const BOTTOM_MARGIN = -5;
 // neon.amber -> neon.ember (ver tailwind.config.ts): amarillento cerca del
 // tallo, más oscuro/café hacia las puntas de la espiga.
-const COLOR_BASE = "#ffae42";
-const COLOR_TIP = "#ff6a00";
+const COLOR_BASE = "#ffec42";
+const COLOR_TIP = "#ffae00";
 const COLOR_BASE2 = "#5f3d10";
-const COLOR_TIP2 = "#492a13";
+const COLOR_TIP2 = "#9c8776";
 
 /**
  * Pistilos de la punta de la milpa: a diferencia de las hojas (que crecen
@@ -37,9 +37,9 @@ export default function MilpaPistilos() {
   });
 
   const segments2 = interpretTurtle(instructions, {
-    stepLength: 150,
+    stepLength: 140,
     angleDeg: TASSEL_VARIANT.angleDeg,
-    angleJitter: 45,
+    angleJitter: 40,
     startX: -65,
     startY: 10,
     startAngleDeg: -90,
