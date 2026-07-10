@@ -8,8 +8,17 @@ import type p5 from "p5";
  * inyecta para las piezas con audio: lo necesitan para instanciar componentes de
  * p5.sound (`new P5.Oscillator()`, `new P5.FFT()`, `P5.Vector.add(...)`). Las
  * piezas puramente visuales lo ignoran.
+ *
+ * El tercer argumento es el módulo de **Tone.js**, inyectado igual que `P5`
+ * para las piezas de audio que ya migraron al motor Tone (ver
+ * `lib/bibliotecas/cleanup.ts` para el patrón de dispose). Es una referencia
+ * *type-only* (`typeof import(...)`), así que no genera un import en runtime.
  */
-export type SketchFactory = (p: p5, P5?: typeof p5) => void;
+export type SketchFactory = (
+  p: p5,
+  P5?: typeof p5,
+  Tone?: typeof import("tone"),
+) => void;
 
 export interface SketchControl {
   key: string;
@@ -27,6 +36,14 @@ export interface SketchMeta {
   controls?: SketchControl[];
   /** Si la pieza necesita audio / gesto del usuario antes de sonar. */
   needsAudio?: boolean;
+  /**
+   * Motor de audio que usa la pieza (solo relevante si `needsAudio`). p5.sound
+   * y Tone.js no conviven bien en la misma página (ambos administran su propio
+   * `AudioContext` global) — cargar el addon de p5.sound cuando la pieza en
+   * realidad ya migró a Tone rompe la creación de nodos. Por defecto
+   * `"p5.sound"` (piezas aún no migradas); las migradas declaran `"tone"`.
+   */
+  motorAudio?: "p5.sound" | "tone";
   /**
    * Póster estático para la grilla. Si se omite, se deriva del slug
    * (`sketchImageUrl`).

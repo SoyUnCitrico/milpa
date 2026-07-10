@@ -1,55 +1,76 @@
 import type p5 from "p5";
+import type * as Tone from "tone";
+
+/** Colores de trazo del osciloscopio/espectro — configurables por sketch. */
+export interface ColoresPlotter {
+  onda: string;
+  espectro: string;
+}
+
+const COLORES_DEFECTO: ColoresPlotter = { onda: "#33ff77", espectro: "#ff8c1a" };
 
 /**
- * Pantalla/osciloscopio del sintetizador, portada de
- * `creativeCode/libraries/synth/ScreenPlotter.js` a modo instancia.
+ * Pantalla/osciloscopio del sintetizador, migrada de `p5.FFT` a
+ * `Tone.Analyser`. Mantiene dos analizadores (uno "waveform", uno "fft")
+ * alimentados por el mismo nodo de entrada, ya que la biblioteca original
+ * podía pedir ambas vistas de un mismo `p5.FFT`.
  *
- * Toma una entrada de audio (oscilador, filtro o envolvente) vía un `p5.FFT` y la
- * grafica como forma de onda (`plotWave`), espectro (`plotFFT`) o envolvente
- * (`plotADSR`) dentro de un rectángulo `pos`/`size`. Recibe `p` (instancia, para la
- * API de dibujo) y `P5` (constructor, para `new P5.FFT()` y `P5.Vector.add`).
+ * Nota: `plotADSR` reutiliza el analizador de forma de onda para graficar el
+ * valor de control de una envolvente (0–1) en vez de audio — mismo truco que
+ * el original, que tapeaba el `p5.FFT` con la salida de un `p5.Envelope`.
  */
 export class ScreenPlotter {
   p: p5;
   pos: p5.Vector;
   size: p5.Vector;
   isLog: boolean;
-  bNormalize: boolean;
-  centerClip: boolean;
   finalPlot: p5.Vector;
-  // Los nodos de p5.sound no están tipados de forma fiable en @types/p5: `any`.
-  fft: any;
+  colores: ColoresPlotter;
+  private analyserOnda: Tone.Analyser;
+  private analyserEspectro: Tone.Analyser;
 
-  constructor(p: p5, P5: typeof p5, size: p5.Vector, pos: p5.Vector) {
+  constructor(
+    p: p5,
+    ToneModule: typeof Tone,
+    size: p5.Vector,
+    pos: p5.Vector,
+    colores: ColoresPlotter = COLORES_DEFECTO,
+  ) {
     this.p = p;
     this.pos = pos;
     this.size = size;
     this.isLog = true;
-    this.bNormalize = true;
-    this.centerClip = false;
-    this.finalPlot = P5.Vector.add(this.size, this.pos);
-    this.fft = new (P5 as any).FFT();
+    this.colores = colores;
+    this.finalPlot = size.copy().add(pos);
+    this.analyserOnda = new ToneModule.Analyser("waveform", 1024);
+    this.analyserEspectro = new ToneModule.Analyser("fft", 1024);
   }
 
-  configEntrada(input: unknown) {
-    this.fft.setInput(input);
+  configEntrada(nodo: Tone.ToneAudioNode) {
+    nodo.connect(this.analyserOnda);
+    nodo.connect(this.analyserEspectro);
+  }
+
+  dispose() {
+    this.analyserOnda.dispose();
+    this.analyserEspectro.dispose();
   }
 
   plotFFT() {
     const p = this.p;
-    const spectrum = this.fft.analyze(1024);
+    const spectrum = this.analyserEspectro.getValue() as Float32Array;
     p.noStroke();
+    p.fill(this.colores.espectro);
     for (let i = 0; i < spectrum.length; i++) {
-      const c = p.map(i, 0, spectrum.length, 0, 255);
-      p.fill(c, 255, 255);
-
+      // Tone entrega el espectro en dB (~ -100 a 0); se remapea a 0–size.y.
+      const db = p.constrain(spectrum[i], -100, 0);
       if (this.isLog) {
-        const a = p.map(p.log(i), 0, p.log(spectrum.length), this.pos.x, this.finalPlot.x);
-        const b = p.map(spectrum[i], 0, 255, 0, this.size.y);
+        const a = p.map(p.log(i + 1), 0, p.log(spectrum.length), this.pos.x, this.finalPlot.x);
+        const b = p.map(db, -100, 0, 0, this.size.y);
         p.rect(a, this.finalPlot.y, this.size.x / spectrum.length, -b);
       } else {
         const a = p.map(i, 0, spectrum.length, this.pos.x, this.finalPlot.x);
-        const b = p.map(spectrum[i], 0, 255, 0, this.size.y);
+        const b = p.map(db, -100, 0, 0, this.size.y);
         p.rect(a, this.finalPlot.y, this.size.x / spectrum.length, -b);
       }
     }
@@ -57,10 +78,10 @@ export class ScreenPlotter {
 
   plotWave() {
     const p = this.p;
-    const waveform = this.fft.waveform(1024, "float32");
+    const waveform = this.analyserOnda.getValue() as Float32Array;
     p.noFill();
     p.beginShape();
-    p.stroke(100, 255, 255);
+    p.stroke(this.colores.onda);
     for (let i = 0; i < waveform.length; i++) {
       const x = p.map(i, 0, waveform.length, this.pos.x, this.finalPlot.x);
       const y = p.map(waveform[i], -1, 1, this.pos.y, this.finalPlot.y);
@@ -71,11 +92,12 @@ export class ScreenPlotter {
 
   plotADSR() {
     const p = this.p;
-    const waveform = this.fft.waveform(32, "float32");
+    const waveform = this.analyserOnda.getValue() as Float32Array;
+    const paso = Math.max(1, Math.floor(waveform.length / 32));
     p.noFill();
     p.beginShape();
-    p.stroke(100, 255, 255);
-    for (let i = 0; i < waveform.length; i++) {
+    p.stroke(this.colores.onda);
+    for (let i = 0; i < waveform.length; i += paso) {
       const x = p.map(i, 0, waveform.length, this.pos.x, this.finalPlot.x);
       const y = p.map(waveform[i], 1, 0, this.pos.y, this.finalPlot.y);
       p.vertex(x, y);

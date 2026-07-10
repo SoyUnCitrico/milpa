@@ -30,7 +30,7 @@ export default function SketchDetail({
   slug: string;
   code: string;
 }) {
-  const [showNav, setShowNav] = useState(true);
+  const [showNav, setShowNav] = useState(false);
   const [showCode, setShowCode] = useState(true);
 
   const entry = getSketch(slug);
@@ -59,6 +59,7 @@ export default function SketchDetail({
                 width={meta.width}
                 height={meta.height}
                 needsAudio={meta.needsAudio}
+                motorAudio={meta.motorAudio}
               />
             </div>
           </div>

@@ -16,14 +16,20 @@ import type { SketchFactory } from "../types";
  * pasaba el ángulo por error como color de trazo y dejaba la rotación en 0
  * (ver translation_p5_works.md). La animación estaba comentada en el original,
  * así que la pieza se detiene con `noLoop()` tras el primer frame.
+ *
+ * Paleta reestilizada a un duotono cyberpunk (noche violeta + neón naranja/
+ * ámbar), manteniendo la identidad cálida del girasol original.
  */
-export const girasol: SketchFactory = (p: p5) => {
-  const sfColor1 = "#824B27";
-  const sfColor2 = "#0E060F";
-  const sfColor3 = "#C86D18";
-  const sfColor4 = "#E7A014";
-  const skyColor = "#92B6E4";
+/** Paleta del sketch — ajustar aquí sin tocar la lógica de dibujo. */
+const PALETA = {
+  cielo: "#150826", // antes #92B6E4 (cielo día pastel) → noche synthwave violeta
+  centro: "#b8551c", // antes #824B27
+  semillas: "#1c0a29", // antes #0E060F, ahora violeta-negro coherente con el cielo
+  corona: "#ff8c1a", // antes #C86D18, empujado a neon-orange
+  petalos: "#ffae42", // antes #E7A014, empujado a neon-amber
+};
 
+export const girasol: SketchFactory = (p: p5) => {
   const numParticulas1 = 400;
   const numParticulas2 = 100;
   const numParticulas3 = 800;
@@ -33,7 +39,7 @@ export const girasol: SketchFactory = (p: p5) => {
 
   p.setup = () => {
     p.createCanvas(1254, 1254);
-    p.background(skyColor);
+    p.background(PALETA.cielo);
 
     // setSpiral(ciclos, radioInt, radioExt, stepsRadio, total, size, stroke, type, color)
     //   → new Spiral(p, total, ciclos, radioInt, radioExt, stepsRadio, size, stroke, type, color)
@@ -47,7 +53,7 @@ export const girasol: SketchFactory = (p: p5) => {
       4,
       0,
       "square",
-      sfColor1,
+      PALETA.centro,
     );
 
     semillas = new Spiral(
@@ -60,7 +66,7 @@ export const girasol: SketchFactory = (p: p5) => {
       10,
       1,
       "circle",
-      sfColor2,
+      PALETA.semillas,
     );
 
     corona = new Spiral(
@@ -73,10 +79,10 @@ export const girasol: SketchFactory = (p: p5) => {
       4,
       2,
       "circle",
-      sfColor3,
+      PALETA.corona,
     );
 
-    petalos = new Spiral(p, numParticulas4, 3, 400, 450, 8, 40, 5, "square", sfColor4);
+    petalos = new Spiral(p, numParticulas4, 3, 400, 450, 8, 40, 5, "square", PALETA.petalos);
   };
 
   p.draw = () => {

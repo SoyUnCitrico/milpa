@@ -49,6 +49,15 @@ const config: Config = {
         "glow-orange": "0 0 12px rgba(255, 140, 26, 0.4)",
         "glow-green": "0 0 12px rgba(51, 255, 119, 0.35)",
       },
+      animation: {
+        fog: "fog 120s linear infinite",
+      },
+      keyframes: {
+        fog: {
+          "0%": { backgroundPosition: "0 0" },
+          "100%": { backgroundPosition: "-10000px 0" },
+        },
+      },
     },
   },
   plugins: [],

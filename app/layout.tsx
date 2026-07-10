@@ -23,7 +23,7 @@ export default function RootLayout({
     <html lang="es" className={mono.variable}>
       {/* Sin bg-fondo en body: el fondo opaco vive en html (globals.css) para
           no tapar la escena parallax fija de la landing. */}
-      <body className="min-h-screen font-mono text-crema antialiased">
+      <body className="min-h-screen font-mono text-crema antialiased"> 
         {children}
       </body>
     </html>

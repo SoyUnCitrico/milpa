@@ -17,7 +17,17 @@ import type { SketchFactory } from "../types";
  *
  * Interacción: arrastrar = inclinar/orbitar la cámara (eje X); flechas =
  * falloff/octavas; `+`/`-` = zoom; espacio = nueva semilla; `s` = guardar PNG.
+ *
+ * Rendimiento: `colorMode(RGB)` se fija una sola vez en `setup()` — antes se
+ * llamaba por cada vértice de la malla (~2,600 veces/frame), redundante.
  */
+/** Paleta del sketch — ajustar aquí sin tocar la lógica de dibujo. */
+const PALETA = {
+  fondo: "#050805", // matrix-black
+  cuerpo: "#00ff41", // matrix-green
+  cima: "#ff8c1a", // neon-orange
+};
+
 export const terrenoRuido: SketchFactory = (p: p5) => {
   const tileCount = 50;
   const zScale = 150;
@@ -51,17 +61,18 @@ export const terrenoRuido: SketchFactory = (p: p5) => {
   p.setup = () => {
     p.createCanvas(600, 600, p.WEBGL);
     p.cursor(p.CROSS);
+    p.colorMode(p.RGB);
 
-    // Paleta matrix por altura: fondo/valles negro, cuerpo verde, cimas naranja.
-    bottomColor = p.color("#050805"); // matrix-black
-    midColor = p.color("#00ff41"); // matrix-green
-    topColor = p.color("#ff8c1a"); // neon-orange
+    // Paleta por altura: fondo/valles = fondo, cuerpo del relieve, cimas = acento.
+    bottomColor = p.color(PALETA.fondo);
+    midColor = p.color(PALETA.cuerpo);
+    topColor = p.color(PALETA.cima);
 
     targetRotationX = p.PI / 3;
   };
 
   p.draw = () => {
-    p.background("#050805"); // matrix-black
+    p.background(PALETA.fondo);
 
     // LFOs senoidales autónomos: cada eje modula su rango de ruido a distinta
     // frecuencia, así el relieve "respira" sin intervención del usuario.
@@ -103,7 +114,6 @@ export const terrenoRuido: SketchFactory = (p: p5) => {
         const z2 = p.noise(noiseX, noiseY + noiseStepY);
 
         noiseYMax = p.max(noiseYMax, z1);
-        p.colorMode(p.RGB);
         let interColor: p5.Color;
         let amount: number;
         if (z1 <= threshold) {

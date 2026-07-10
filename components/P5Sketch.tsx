@@ -10,8 +10,15 @@ interface P5SketchProps {
   width: number;
   height: number;
   className?: string;
-  /** Si la pieza usa p5.sound: carga el addon y muestra el gesto de audio. */
+  /** Si la pieza necesita audio: carga el/los addon(es) y muestra el gesto de audio. */
   needsAudio?: boolean;
+  /**
+   * Motor de audio de la pieza. p5.sound y Tone.js no conviven bien en la
+   * misma página (ambos administran su propio `AudioContext` global) — cargar
+   * el addon de p5.sound cuando la pieza ya migró a Tone rompe la creación de
+   * nodos. Por defecto `"p5.sound"`.
+   */
+  motorAudio?: "p5.sound" | "tone";
 }
 
 const useIsomorphicLayoutEffect =
@@ -25,8 +32,10 @@ const useIsomorphicLayoutEffect =
  *   evitando el acceso a `window`/`document` en SSR.
  * - Se pasa el **constructor** de p5 como 2º argumento de la factory para las
  *   piezas que instancian componentes de p5.sound.
- * - Si `needsAudio`, se carga el addon `p5.sound` y se muestra un overlay de gesto
- *   (el navegador exige interacción antes de iniciar el AudioContext).
+ * - Si `needsAudio`, se carga el addon `p5.sound`, se importa Tone.js dinámicamente
+ *   (3er argumento de la factory, para las piezas ya migradas a ese motor) y se
+ *   muestra un overlay de gesto (el navegador exige interacción antes de iniciar
+ *   el AudioContext).
  * - **Escalado responsivo por `transform: scale()`**: el sketch se monta a su
  *   tamaño lógico nativo (`width`×`height`) y se escala junto con cualquier
  *   elemento DOM que cree (sliders, botones). Así los sliders posicionados en
@@ -39,10 +48,12 @@ export default function P5Sketch({
   height,
   className,
   needsAudio,
+  motorAudio = "p5.sound",
 }: P5SketchProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<p5 | undefined>(undefined);
+  const toneRef = useRef<typeof import("tone") | undefined>(undefined);
   const [scale, setScale] = useState(1);
   const [audioReady, setAudioReady] = useState(false);
   // Resolución lógica REAL de la pieza. Parte de las props (meta) y se adopta la
@@ -72,15 +83,24 @@ export default function P5Sketch({
     (async () => {
       const p5Module = (await import("p5")).default;
 
+      let toneModule: typeof import("tone") | undefined;
       if (needsAudio) {
-        // p5.sound se cuelga del constructor global; el bundler necesita window.p5.
-        (window as unknown as { p5: typeof p5 }).p5 = p5Module;
-        await import("p5/lib/addons/p5.sound");
+        if (motorAudio === "p5.sound") {
+          // p5.sound se cuelga del constructor global; el bundler necesita window.p5.
+          // No se carga si la pieza ya migró a Tone: p5.sound y Tone pelean por el
+          // AudioContext global y rompen la creación de nodos de Tone.
+          (window as unknown as { p5: typeof p5 }).p5 = p5Module;
+          await import("p5/lib/addons/p5.sound");
+        } else {
+          // Tone también toca window/AudioContext: se importa dinámico, solo en cliente.
+          toneModule = await import("tone");
+          toneRef.current = toneModule;
+        }
       }
 
       if (cancelled || !containerRef.current) return;
       instanceRef.current = new p5Module(
-        (p) => factory(p, p5Module),
+        (p) => factory(p, p5Module, toneModule),
         containerRef.current,
       );
 
@@ -110,14 +130,18 @@ export default function P5Sketch({
       });
       instanceRef.current?.remove();
       instanceRef.current = undefined;
+      toneRef.current = undefined;
     };
-  }, [factory, needsAudio, width, height]);
+  }, [factory, needsAudio, motorAudio, width, height]);
 
   const startAudio = () => {
     const instance = instanceRef.current as
       | (p5 & { userStartAudio?: () => void })
       | undefined;
     instance?.userStartAudio?.();
+    // Tone.js administra su propio AudioContext, separado del de p5.sound:
+    // también necesita el gesto del usuario para arrancar.
+    void toneRef.current?.start();
     setAudioReady(true);
   };
 

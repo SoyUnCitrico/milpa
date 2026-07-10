@@ -9,6 +9,7 @@ import MilpaRaices from "@/components/MilpaRaices";
 import SketchCard from "@/components/SketchCard";
 import { createRng } from "@/lib/milpa/random";
 import { sketches } from "@/lib/sketches";
+import theme from "@/tailwind.config";
 
 export default function Home() {
   // La milpa crece de abajo hacia arriba: los sketches más básicos (los
@@ -30,7 +31,7 @@ export default function Home() {
   const filasConMazorca = new Set(candidatas.slice(0, Math.min(3, filasSuperiores)));
 
   return (
-    <>
+    <div className={ `animation-fog` }>
       {/* Valle de la Milpa: fondo parallax fijo (cielo/montaña, árboles,
           milpa cercana, llovizna/fauna) que reacciona al scroll, la hora y
           el clima. Vive detrás de todo con z-index negativo. */}
@@ -90,6 +91,6 @@ export default function Home() {
           {sketches.length === 1 ? "" : "s"} en la galería.
         </footer>
       </main>
-    </>
+    </div>
   );
 }

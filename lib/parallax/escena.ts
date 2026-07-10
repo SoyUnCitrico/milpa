@@ -2,7 +2,12 @@ import type p5 from "p5";
 import { lerpHexColor } from "@/lib/milpa/color";
 import { createRng } from "@/lib/milpa/random";
 import type { Point } from "@/lib/milpa/spaceColonization";
-import { generarBosque, type Arbol } from "./arboles";
+import {
+  generarInstanciasArbol,
+  plantarBosque,
+  type ArbolPlantado,
+  type InstanciaArbol,
+} from "./arboles";
 import { horaContinua, hornearCielo, hornearNubes, paletaPorHora } from "./cielo";
 import { viento01 } from "./clima";
 import { actualizarYDibujarFauna, crearFauna, type Criatura } from "./fauna";
@@ -24,20 +29,22 @@ import { clamp01, rgba } from "./util";
  */
 
 // matrix.black / matrix.panel (tailwind.config.ts): tierra, siluetas y scrim.
-const NEGRO = "#160a05";
-const PANEL = "#0a140d";
+const NEGRO = "#1d0d02";
+const NEGRO_MONTANA = "#010e03";
+const PANEL = "#331c08";
 // matrix.dim → matrix.text: rampa de las hojas de milpa (como MilpaHoja).
 const HOJA_BASE = "#00b341";
 const HOJA_PUNTA = "#7fffa8";
 // Verde apagado de enredadera (MilpaFrijol.CAPA_DELANTE.base): copas de árbol.
 const COPA_BASE = "#124d27";
+const VERDE_ARBOL = "#88ec7f";
 // neon.violet / neon.orchid: flores de la milpa, mismas que las del frijol.
 const FLOR_PETALO = "#a855f7";
 const FLOR_BOCA = "#c98bff";
 
 // Factores de parallax (fracción del alto de viewport que viaja cada capa).
+// El bosque va horneado en el buffer de la montaña y viaja con ella.
 const VIAJE_MONTANIA = 0.05;
-const VIAJE_ARBOLES = 0.15;
 const VIAJE_MILPA = 0.35;
 /** Cuánto crece la montaña entre el inicio y el final del scroll. */
 const CRECIMIENTO_MONTANIA = 0.55;
@@ -66,11 +73,12 @@ export function crearEscena(estado: EstadoEscena) {
     let bufCielo: p5.Graphics | null = null;
     let bufNubes: p5.Graphics | null = null;
     let bufMontania: p5.Graphics | null = null;
-    let bufArboles: p5.Graphics | null = null;
 
     // Geometría precalculada.
     let montania: Montania | null = null;
-    let bosque: Arbol[] = [];
+    /** 3 geometrías de árbol; el bosque son estampas de ellas en la ladera. */
+    let instanciasArbol: InstanciaArbol[] = [];
+    let bosque: ArbolPlantado[] = [];
     let matas: Mata[] = [];
     /** X de cada surco en la línea de siembra (uno por mata + intermedios). */
     let surcosBase: number[] = [];
@@ -115,8 +123,6 @@ export function crearEscena(estado: EstadoEscena) {
       bufCielo?.remove();
       bufNubes?.remove();
       bufMontania?.remove();
-      bufArboles?.remove();
-      bufArboles = null;
 
       bufCielo = crearBuffer(vw, vh);
       bufNubes = crearBuffer(vw * 1.6, vh * 0.45);
@@ -127,17 +133,22 @@ export function crearEscena(estado: EstadoEscena) {
         height: vh * k,
         yHorizonte: yHorizonte * k,
         seed: `${SEMILLA}-montania`,
+        rugosidad: vh * 0.27,
+        //alturaPico: vh * 0.72,
       });
 
-      const ySueloArboles = yHorizonte + vh * 0.06;
-      bosque = generarBosque({
-        width: vw,
-        ySuelo: modoLigero ? ySueloArboles * k : ySueloArboles,
+      // Bosque sobre la montaña: 3 instancias de árbol estampadas muchas
+      // veces por toda la ladera, en coordenadas del buffer de montaña
+      // (comparten su perspectiva: crecen y viajan con ella).
+      instanciasArbol = generarInstanciasArbol(`${SEMILLA}-arboles`);
+      bosque = plantarBosque({
+        cresta: montania.principal,
+        yHorizonte: yHorizonte * k,
         seed: `${SEMILLA}-bosque`,
-        cantidad: modoLigero ? 7 : 10,
-        alturaMax: vh * 0.24,
+        cantidad: modoLigero ? 12 : 22,
+        alturaCercana: vh * 0.14 * k,
+        numInstancias: instanciasArbol.length,
       });
-      if (!modoLigero) bufArboles = crearBuffer(vw, vh * 1.2);
 
       matas = generarMilpaCercana({
         width: vw,
@@ -177,13 +188,8 @@ export function crearEscena(estado: EstadoEscena) {
       if (bufNubes) hornearNubes(bufNubes, paleta, condicion, `${SEMILLA}-nubes`);
       if (bufMontania && montania) {
         hornearMontania(bufMontania, montania, yHorizonte * RESOLUCION_MONTANIA);
-        // Modo ligero: los árboles van dentro del buffer de montaña (un
-        // buffer fullscreen menos) y viajan con ella.
-        if (modoLigero) hornearArboles(bufMontania, RESOLUCION_MONTANIA);
-      }
-      if (bufArboles) {
-        bufArboles.clear();
-        hornearArboles(bufArboles, 1);
+        // El bosque vive sobre la ladera, dentro del buffer de la montaña.
+        hornearArboles(bufMontania);
       }
 
       // Rampa de color de hojas (4 cubetas base→punta), oscurecida de noche.
@@ -235,45 +241,59 @@ export function crearEscena(estado: EstadoEscena) {
       for (const punto of m.principal) if (punto.y < cima) cima = punto.y;
       const grad = ctx.createLinearGradient(0, cima, 0, yHor);
       grad.addColorStop(0, lerpHexColor(paleta.bruma, PANEL, 0.35));
-      grad.addColorStop(1, lerpHexColor(paleta.bruma, NEGRO, 0.75));
+      grad.addColorStop(1, lerpHexColor(paleta.bruma, NEGRO_MONTANA, 0.75));
       rellenar(m.principal, grad);
 
       // Suelo desde el horizonte hacia abajo (el plano donde vive todo).
       const suelo = ctx.createLinearGradient(0, yHor, 0, h);
-      suelo.addColorStop(0, lerpHexColor(paleta.bruma, NEGRO, 0.72));
-      suelo.addColorStop(1, NEGRO);
+      suelo.addColorStop(0, lerpHexColor(paleta.bruma, NEGRO_MONTANA, 0.72));
+      suelo.addColorStop(1, NEGRO_MONTANA);
       ctx.fillStyle = suelo;
       ctx.fillRect(0, yHor, w, h - yHor);
     }
 
-    /** Dibuja el bosque en un buffer (a escala k si va dentro de la montaña). */
-    function hornearArboles(g: p5.Graphics, k: number): void {
+    /**
+     * Estampa el bosque sobre la ladera, dentro del buffer de la montaña
+     * (mismas coordenadas). Los árboles lejanos (junto a la cresta) se
+     * pintan más chicos, más tenues y hundidos en bruma; los cercanos, al
+     * pie, con más contraste. `bosque` ya viene ordenado de lejos a cerca.
+     */
+    function hornearArboles(g: p5.Graphics): void {
       const ctx = contexto(g);
-      const colorTronco = lerpHexColor(PANEL, paleta.bruma, 0.3);
-      const colorCopa = rgba(lerpHexColor(COPA_BASE, paleta.bruma, 0.35), 0.5);
+      const troncoCerca = lerpHexColor(PANEL, paleta.bruma, 0.3);
+      const copaCerca = lerpHexColor(VERDE_ARBOL, paleta.bruma, 0.35);
 
       for (const arbol of bosque) {
-        const ax = arbol.x * k;
-        const ay = arbol.y;
+        const inst = instanciasArbol[arbol.instancia];
+        if (!inst) continue;
+        const a = arbol.altura;
+        const e = arbol.espejo;
+        const colorTronco = lerpHexColor(troncoCerca, paleta.bruma, arbol.lejania * 0.55);
+        const colorCopa = rgba(
+          lerpHexColor(copaCerca, paleta.bruma, arbol.lejania * 0.5),
+          0.5 - 0.25 * arbol.lejania,
+        );
+
         // Copa detrás de las ramas.
-        if (arbol.copa.length >= 3) {
+        if (inst.copa.length >= 3) {
           ctx.beginPath();
-          ctx.moveTo(ax + arbol.copa[0].x * k, ay + arbol.copa[0].y * k);
-          for (let i = 1; i < arbol.copa.length; i++) {
-            ctx.lineTo(ax + arbol.copa[i].x * k, ay + arbol.copa[i].y * k);
+          ctx.moveTo(arbol.x + e * inst.copa[0].x * a, arbol.y + inst.copa[0].y * a);
+          for (let i = 1; i < inst.copa.length; i++) {
+            ctx.lineTo(arbol.x + e * inst.copa[i].x * a, arbol.y + inst.copa[i].y * a);
           }
           ctx.closePath();
           ctx.fillStyle = colorCopa;
           ctx.fill();
         }
         g.stroke(colorTronco);
-        for (const rama of arbol.ramas) {
-          g.strokeWeight(Math.max(0.8, (3.5 - rama.depth) * k * 0.8));
+        for (const rama of inst.ramas) {
+          // Grosor proporcional al tamaño de la estampa, afinando por rama.
+          g.strokeWeight(Math.max(0.7, (3.2 - rama.depth) * (a / 210)));
           g.line(
-            ax + rama.from.x * k,
-            ay + rama.from.y * k,
-            ax + rama.to.x * k,
-            ay + rama.to.y * k,
+            arbol.x + e * rama.from.x * a,
+            arbol.y + rama.from.y * a,
+            arbol.x + e * rama.to.x * a,
+            arbol.y + rama.to.y * a,
           );
         }
       }
@@ -469,16 +489,14 @@ export function crearEscena(estado: EstadoEscena) {
         p.image(bufMontania, dx, dy, dw, dh);
       }
 
-      // — Capa 2: árboles (buffer propio, salvo en modo ligero).
-      if (bufArboles) {
-        p.image(bufArboles, 0, -progreso * vh * VIAJE_ARBOLES);
-      }
+      // — Capa 2: el bosque va horneado dentro del buffer de la montaña
+      // (comparte su perspectiva y su crecimiento con el scroll).
 
       // — Capa 3: milpa cercana viva.
       dibujarMilpa(progreso, tiempo, v01);
 
       // — Capa 4: fauna (solo despejado y con luz) y llovizna.
-      const faunaActiva = condicion === "despejado" && paleta.luzFauna > 0.15;
+      const faunaActiva = condicion === "despejado"|| condicion === "nublado" && paleta.luzFauna > 0.15;
       actualizarYDibujarFauna(
         p,
         fauna,
@@ -493,7 +511,7 @@ export function crearEscena(estado: EstadoEscena) {
       const objetivoLluvia = condicion === "lluvia" && !estatico ? 1 : 0;
       intensidadLluvia += (objetivoLluvia - intensidadLluvia) * 0.06;
       if (llovizna && intensidadLluvia > 0.02) {
-        p.strokeWeight(1);
+        p.strokeWeight(5);
         p.stroke(rgba(lerpHexColor(paleta.bruma, "#e8f2fa", 0.4), 0.34 * intensidadLluvia));
         llovizna.actualizarYDibujar(
           (x1, y1, x2, y2) => p.line(x1, y1, x2, y2),
@@ -512,5 +530,9 @@ export function crearEscena(estado: EstadoEscena) {
       // si algo cambia (resize, preferencia).
       if (estatico) p.noLoop();
     };
+
+    p.mouseClicked = () => {
+      if (estado.reducedMotion) p.loop();
+    }
   };
 }

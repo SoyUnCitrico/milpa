@@ -5,9 +5,12 @@ import { createRng } from "@/lib/milpa/random";
 import type { Point, Segment } from "@/lib/milpa/spaceColonization";
 
 /**
- * Árboles de la capa media: L-systems (reutilizando el motor de lib/milpa)
- * en 3 variantes de silueta, sembrados de forma determinista a lo largo de
- * la línea de suelo. La copa es el casco convexo de las puntas de las ramas.
+ * Bosque sobre la montaña: se generan 3 INSTANCIAS de árbol (una por
+ * variante de L-system, reutilizando el motor de lib/milpa) y se estampan
+ * muchas veces repartidas por la ladera. La perspectiva es frontal: cuanto
+ * más arriba de la ladera (más lejos), más chico y más hundido en bruma.
+ * Las estampas viven en el buffer de la montaña, así crecen y viajan con
+ * ella al hacer scroll.
  */
 
 // Frondoso clásico: ramifica denso a ambos lados.
@@ -36,94 +39,117 @@ const ARBOL_ABIERTO: LSystemVariant = {
 
 const VARIANTES = [ARBOL_FRONDOSO, ARBOL_COLUMNAR, ARBOL_ABIERTO];
 
-export interface Arbol {
-  /** Posición del pie del tronco dentro del buffer. */
+/** Geometría de un árbol normalizada a altura 1 (pie en el origen, crece a -y). */
+export interface InstanciaArbol {
+  ramas: Segment[];
+  copa: Point[];
+}
+
+/** Una estampa de instancia colocada sobre la ladera. */
+export interface ArbolPlantado {
+  /** Pie del árbol en coordenadas del buffer de la montaña. */
   x: number;
   y: number;
-  /** Segmentos del árbol en coordenadas locales (pie en el origen). */
-  ramas: Segment[];
-  /** Silueta de copa (casco convexo de puntas profundas), coords locales. */
-  copa: Point[];
-  /** Profundidad máxima de rama (para graduar grosor/color). */
-  maxDepth: number;
+  /** Altura en px de esta estampa. */
+  altura: number;
+  /** 0 = al pie de la ladera (cerca), 1 = junto a la cresta (lejos). */
+  lejania: number;
+  /** Índice en el arreglo de instancias. */
+  instancia: number;
+  /** Espejo horizontal para variar sin regenerar. */
+  espejo: 1 | -1;
 }
 
-export interface OpcionesBosque {
-  width: number;
-  /** Línea de suelo alrededor de la cual se plantan (varía un poco por árbol). */
-  ySuelo: number;
+/** Genera las 3 instancias (una por variante), normalizadas a altura 1. */
+export function generarInstanciasArbol(seed: number | string): InstanciaArbol[] {
+  const rng = createRng(seed);
+  return VARIANTES.map((variante) => {
+    const instrucciones = expandLSystem(variante.axiom, variante.rules, variante.iterations);
+    const ramas = interpretTurtle(instrucciones, {
+      stepLength: 10,
+      angleDeg: variante.angleDeg,
+      angleJitter: 8,
+      startAngleDeg: -90,
+      rng,
+    });
+
+    // Normaliza a altura 1: escala uniforme por la extensión vertical real.
+    let minY = 0;
+    for (const s of ramas) if (s.to.y < minY) minY = s.to.y;
+    const escala = 1 / Math.max(1e-6, -minY);
+    const normalizadas: Segment[] = ramas.map((s) => ({
+      from: { x: s.from.x * escala, y: s.from.y * escala },
+      to: { x: s.to.x * escala, y: s.to.y * escala },
+      depth: s.depth,
+    }));
+
+    // Copa: casco convexo SOLO de los nodos alejados de la raíz; se excluye
+    // la espina del tronco (depth 0) para no encerrarlo.
+    let alcance = 0;
+    for (const s of normalizadas) {
+      const d = Math.hypot(s.to.x, s.to.y);
+      if (d > alcance) alcance = d;
+    }
+    const umbral = alcance * 0.5;
+    const puntas: Point[] = [];
+    for (const s of normalizadas) {
+      if (s.depth >= 1 && Math.hypot(s.to.x, s.to.y) >= umbral) puntas.push(s.to);
+    }
+    const copa = puntas.length >= 3 ? convexHull(puntas) : [];
+
+    return { ramas: normalizadas, copa };
+  });
+}
+
+export interface OpcionesPlantado {
+  /** Cresta principal de la montaña (coords del buffer, x creciente). */
+  cresta: Point[];
+  /** Y del horizonte en el buffer (pie de la ladera). */
+  yHorizonte: number;
   seed: number | string;
   cantidad?: number;
-  /** Altura aproximada del árbol más alto, en px. */
-  alturaMax?: number;
+  /** Altura en px de un árbol al pie de la ladera (los lejanos se reducen). */
+  alturaCercana: number;
+  numInstancias: number;
 }
 
-function generarArbol(
-  variante: LSystemVariant,
-  altura: number,
-  rng: () => number,
-): { ramas: Segment[]; copa: Point[]; maxDepth: number } {
-  const instrucciones = expandLSystem(variante.axiom, variante.rules, variante.iterations);
-  // Nº de F consecutivos desde la raíz define cuántos pasos mide el tronco;
-  // se normaliza después al alto pedido, así que el paso inicial es libre.
-  const paso = 10;
-  const ramas = interpretTurtle(instrucciones, {
-    stepLength: paso,
-    angleDeg: variante.angleDeg,
-    angleJitter: 8,
-    startAngleDeg: -90,
-    rng,
-  });
-
-  // Normaliza al alto pedido: escala uniforme por la extensión vertical real.
-  let minY = 0;
-  let maxDepth = 0;
-  for (const s of ramas) {
-    if (s.to.y < minY) minY = s.to.y;
-    if (s.depth > maxDepth) maxDepth = s.depth;
-  }
-  const escala = altura / Math.max(1, -minY);
-  const escaladas: Segment[] = ramas.map((s) => ({
-    from: { x: s.from.x * escala, y: s.from.y * escala },
-    to: { x: s.to.x * escala, y: s.to.y * escala },
-    depth: s.depth,
-  }));
-
-  // Copa: casco convexo SOLO de los nodos alejados de la raíz. La
-  // profundidad de anidado no sirve de filtro (hay ramas anidadas que nacen
-  // pegadas al suelo), así que se filtra por distancia geométrica al pie y
-  // se excluye la espina del tronco (depth 0) para no encerrarlo.
-  let alcance = 0;
-  for (const s of escaladas) {
-    const d = Math.hypot(s.to.x, s.to.y);
-    if (d > alcance) alcance = d;
-  }
-  const umbral = alcance * 0.5;
-  const puntas: Point[] = [];
-  for (const s of escaladas) {
-    if (s.depth >= 1 && Math.hypot(s.to.x, s.to.y) >= umbral) puntas.push(s.to);
-  }
-  const copa = puntas.length >= 3 ? convexHull(puntas) : [];
-
-  return { ramas: escaladas, copa, maxDepth };
-}
-
-export function generarBosque(opts: OpcionesBosque): Arbol[] {
-  const { width, ySuelo, seed, cantidad = 10, alturaMax = 260 } = opts;
+/**
+ * Reparte estampas por toda la cara visible de la montaña: solo donde la
+ * ladera existe (cresta por encima del horizonte), a cualquier altura entre
+ * la cresta y el pie, encogiendo con la lejanía. Se devuelven ordenadas de
+ * lejos a cerca para pintarlas con solapado correcto.
+ */
+export function plantarBosque(opts: OpcionesPlantado): ArbolPlantado[] {
+  const { cresta, yHorizonte, seed, cantidad = 20, alturaCercana, numInstancias } = opts;
   const rng = createRng(seed);
-  const arboles: Arbol[] = [];
+  const plantados: ArbolPlantado[] = [];
+  const n = cresta.length;
+  const alturaMinLadera = alturaCercana * 0.5;
 
-  for (let i = 0; i < cantidad; i++) {
-    const variante = VARIANTES[Math.floor(rng() * VARIANTES.length)];
-    const altura = alturaMax * (0.35 + rng() * 0.65);
-    // Reparto horizontal con jitter, dejando algo despejado el centro
-    // (ahí vive la montaña y luego la milpa).
-    const franja = (i + rng()) / cantidad;
-    const x = franja * width;
-    const y = ySuelo + (rng() * 2 - 1) * 14 + (altura / alturaMax) * 18;
-    const { ramas, copa, maxDepth } = generarArbol(variante, altura, rng);
-    arboles.push({ x, y, ramas, copa, maxDepth });
+  let intentos = 0;
+  while (plantados.length < cantidad && intentos < cantidad * 12) {
+    intentos++;
+    const i = Math.floor(rng() * n);
+    const punto = cresta[Math.min(n - 1, i)];
+    const alturaLadera = yHorizonte - punto.y;
+    // Solo donde de verdad hay montaña bajo el punto.
+    if (alturaLadera < alturaMinLadera) continue;
+
+    // t = 0 pegado a la cresta (lejos) … 1 al pie de la ladera (cerca).
+    const t = rng();
+    const y = punto.y + alturaLadera * (0.12 + 0.88 * t);
+    const lejania = 1 - t;
+    plantados.push({
+      x: punto.x + (rng() * 2 - 1) * (cresta[1].x - cresta[0].x) * 2,
+      y,
+      altura: alturaCercana * (0.35 + 0.65 * t),
+      lejania,
+      instancia: Math.floor(rng() * numInstancias),
+      espejo: rng() < 0.5 ? -1 : 1,
+    });
   }
 
-  return arboles;
+  // De lejos (arriba) a cerca (abajo): los cercanos tapan a los lejanos.
+  plantados.sort((a, b) => a.y - b.y);
+  return plantados;
 }

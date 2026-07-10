@@ -83,10 +83,10 @@ export const sketches: SketchEntry[] = [
     meta: {
       slug: "girasol",
       title: "Girasol",
-      author: "mdrn.mx",
+      author: "emm3",
       source: "p5_works/sketches/girasol.js",
       image: `${baseImage}girasol.png`,
-      description: "Girasol estático compuesto por cuatro espirales de partículas (centro, dos coronas de semillas y pétalos) sobre un cielo azul. Estudio de composición polar; reusa la biblioteca Spiral y se detiene con noLoop() tras el primer frame.",
+      description: "Girasol estático compuesto por cuatro espirales de partículas (centro, dos coronas de semillas y pétalos) sobre un cielo violeta synthwave, con corona y pétalos en neón naranja/ámbar. Estudio de composición polar; reusa la biblioteca Spiral y se detiene con noLoop() tras el primer frame.",
       tags: ["espiral", "partículas", "composición", "bibliotecas", "noLoop"],
       controls: [
         { key: "s", action: "Guardar el canvas como PNG (saveCanvas)." },
@@ -437,23 +437,25 @@ export const sketches: SketchEntry[] = [
     meta: {
       slug: "synth",
       title: "Synth Modular",
-      author: "mdrn.mx",
+      author: "emm3",
       source: "creativeCode/synth.js",
       image: `${baseImage}synth.png`,
-      description: "Sintetizador modular: dos osciladores (VCO + PWM) enrutados a un filtro (VCF), con dos envolventes (ADSR). Cada módulo dibuja su propio osciloscopio/espectro. Reusa las bibliotecas del synth en modo instancia. Requiere activar el audio.",
-      tags: ["audio", "síntesis", "VCO/VCF/ADSR", "p5.sound"],
+      description: "Sintetizador modular: dos osciladores (VCO + PWM) enrutados a un filtro (VCF), con dos envolventes (ADSR). Cada módulo dibuja su propio osciloscopio/espectro con knobs giratorios en vez de sliders. Migrado al motor Tone.js, con dispose explícito de todos los nodos al desmontar. Requiere activar el audio.",
+      tags: ["audio", "síntesis", "VCO/VCF/ADSR", "Tone.js"],
+      motorAudio: "tone",
       controls: [
         { key: "1–4 / 8–0", action: "Voz del VCO / del PWM." },
-        { key: "a·s / j·k", action: "Arrancar/parar VCO / PWM." },
+        { key: "a·x / j·k", action: "Arrancar/parar VCO / PWM." },
         { key: "w / l", action: "Onda↔espectro / escala lin↔log." },
         { key: "t / mouse", action: "Disparar envolventes (attack/release)." },
+        { key: "s", action: "Guardar el canvas como PNG (saveCanvas)." },
       ],
       needsAudio: true,
       width: 600,
       height: 600,
     },
     factory: synth,
-  },  
+  },
   // {
   //   meta: {
   //     slug: "piano",
@@ -556,7 +558,7 @@ export const sketches: SketchEntry[] = [
     meta: {
       slug: "terreno-ruido",
       title: "Terreno de Ruido",
-      author: "Generative Design",
+      author: "emm3",
       source: "Code-Package-p5.js/02_M/M_1_4_01/sketch.js",
       image: `${baseImage}terreno-ruido.png`,
       description: "Malla 3D (WEBGL) tipo terreno generada con ruido Perlin, reestilizada al tema del sitio: cuerpo verde matrix con las cimas en naranja neón sobre fondo negro. Pieza autónoma: dos LFOs senoidales a distinta frecuencia modulan el relieve y el terreno gira lento y continuo en Z. Basada en el libro Generative Design (cap. M). Se arrastra con el mouse para inclinar/orbitar la cámara.",
