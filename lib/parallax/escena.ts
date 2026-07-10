@@ -96,6 +96,11 @@ export function crearEscena(estado: EstadoEscena) {
     let siluetaHoja = "";
     let colorTierra = "";
     let colorSurco = "";
+    /** Degradados del campo (horneados): dan profundidad/relieve a la tierra. */
+    let gradTierra: CanvasGradient | null = null;
+    let gradSurco: CanvasGradient | null = null;
+    /** Halo claro de la cresta del surco (difuminado). */
+    let colorSurcoLuz = "";
     let scrim: CanvasGradient | null = null;
 
     /** Fade 0..1 de la llovizna al cambiar de clima (~1 s a 30 fps). */
@@ -203,12 +208,33 @@ export function crearEscena(estado: EstadoEscena) {
       }
       colorTallo = lerpHexColor(HOJA_BASE, NEGRO, 0.25 + oscurecer * 0.6);
       siluetaHoja = rgba(lerpHexColor(COPA_BASE, HOJA_BASE, 0.4), 0.16 * (1 - oscurecer));
-      // Tierra del primer plano y ranura oscura de cada surco.
+      // Tierra del primer plano y ranura oscura de cada surco (fallbacks).
       colorTierra = rgba(lerpHexColor(NEGRO, paleta.bruma, 0.22), 0.55);
       colorSurco = rgba(lerpHexColor(NEGRO, "#000000", 0.45), 0.7);
 
-      // Scrim de legibilidad: más denso de día (la escena brilla más).
       const ctx = contexto(p);
+
+      // Degradados del campo (horneados, cero allocations por frame): tierra y
+      // surcos se aclaran hacia el fondo (lejos, arriba) y se hunden en oscuro
+      // hacia la cámara (cerca, abajo). Anclados en coordenadas absolutas del
+      // lienzo para que el relieve quede fijo mientras la milpa hace scroll.
+      const tierraLejos = lerpHexColor(NEGRO, paleta.bruma, 0.42);
+      const tierraCerca = lerpHexColor(NEGRO, NEGRO_MONTANA, 0.55);
+      gradTierra = ctx.createLinearGradient(0, yHorizonte, 0, vh);
+      gradTierra.addColorStop(0, rgba(tierraLejos, 0.5));
+      gradTierra.addColorStop(1, rgba(tierraCerca, 0.82));
+
+      const surcoTono = lerpHexColor(NEGRO, "#000000", 0.5);
+      gradSurco = ctx.createLinearGradient(0, yHorizonte, 0, vh + 40);
+      gradSurco.addColorStop(0, rgba(surcoTono, 0.2));
+      gradSurco.addColorStop(1, rgba(surcoTono, 0.82));
+      // Cresta iluminada del surco (halo desenfocado); más viva de día.
+      colorSurcoLuz = rgba(
+        lerpHexColor(NEGRO, paleta.bruma, 0.6),
+        0.18 + 0.22 * paleta.luzFauna,
+      );
+
+      // Scrim de legibilidad: más denso de día (la escena brilla más).
       const alfa = 0.3 + 0.3 * paleta.luzFauna;
       scrim = ctx.createLinearGradient(0, 0, 0, vh);
       scrim.addColorStop(0, rgba(NEGRO, alfa * 0.55));
@@ -309,15 +335,26 @@ export function crearEscena(estado: EstadoEscena) {
       if (sueloY >= vh) return; // el campo aún no asoma
       const ctx = contexto(p);
 
-      // Franja de tierra desde la línea de siembra hasta abajo.
-      ctx.fillStyle = colorTierra;
+      // Franja de tierra con degradado vertical: el fondo (lejos, arriba)
+      // queda más claro y el frente (cerca, abajo) más oscuro, para leer la
+      // profundidad del campo.
+      ctx.fillStyle = gradTierra ?? colorTierra;
       ctx.fillRect(0, sueloY, vw, vh - sueloY);
 
       // Ranuras: cuñas que parten casi puntuales en la siembra y se
       // ensanchan al acercarse (abanico alrededor del centro del encuadre).
+      // El degradado las hunde hacia la cámara y un halo claro desenfocado en
+      // el borde superior sugiere la cresta iluminada del surco: eso da el
+      // relieve. El desenfoque se omite en modo ligero (coste de GPU).
       const centro = vw / 2;
       const yFin = vh + 40;
-      ctx.fillStyle = colorSurco;
+      ctx.save();
+      if (!modoLigero) {
+        ctx.shadowColor = colorSurcoLuz;
+        ctx.shadowBlur = 7;
+        ctx.shadowOffsetY = -3;
+      }
+      ctx.fillStyle = gradSurco ?? colorSurco;
       for (const xBase of surcosBase) {
         const xFin = centro + (xBase - centro) * ENSANCHE_SURCOS;
         ctx.beginPath();
@@ -328,6 +365,7 @@ export function crearEscena(estado: EstadoEscena) {
         ctx.closePath();
         ctx.fill();
       }
+      ctx.restore();
     }
 
     /** Capa 3 viva: matas de milpa que se abren con el scroll y ondean. */

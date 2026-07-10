@@ -29,6 +29,19 @@ export class PloterFourier {
   funcActual: number;
   factor: number;
 
+  /**
+   * Paleta cyberpunk (tokens del sitio). Estructura verde, figura naranja neón,
+   * onda cian y puente violeta. Compartida por `spectografo` y `sumador`.
+   */
+  colores = {
+    eje: "#143b22", // matrix-line
+    estructura: "#00b341", // matrix-dim (epiciclos)
+    punto: "#00ff41", // matrix-green (nodos)
+    puente: "#a855f7", // neon-violet (unión polar↔tiempo)
+    figura: "#ff8c1a", // neon-orange (espirógrafo)
+    onda: "#00e5ff", // cian cyberpunk (onda en el tiempo)
+  };
+
   constructor(
     p: p5,
     centroPolarPlot: p5.Vector,
@@ -104,6 +117,30 @@ export class PloterFourier {
           this.puntoExterior.y += this.radio * p.sin(this.tiempo * n);
           amplitud *= this.factor;
           break;
+        case 6:
+          // SIERRA INVERSA — espejo de la sierra (case 3, con signo negado).
+          n = i + 1;
+          this.radio = -4 * this.amp * (1 / 2 - 1 / p.PI) * (1 / n);
+          this.puntoExterior.x += this.radio * p.cos(n * this.tiempo);
+          this.puntoExterior.y += this.radio * p.sin(n * this.tiempo);
+          break;
+        case 7:
+          // PULSO (onda rectangular de ciclo de trabajo 0.3): amplitud de cada
+          // armónico ∝ sin(n·π·duty); incluye pares e impares (más denso que la
+          // cuadrada). Escala ×2 para igualar la altura de la cuadrada.
+          n = i + 1;
+          this.radio = this.amp * (2 / (n * p.PI)) * p.sin(n * p.PI * 0.3) * 2;
+          this.puntoExterior.x += this.radio * p.cos(n * this.tiempo);
+          this.puntoExterior.y += this.radio * p.sin(n * this.tiempo);
+          break;
+        case 8:
+          // IMPULSO — armónicos que decaen lento (1/√n): serie más "puntiaguda"
+          // que la sierra, tiende a un tren de pulsos al subir los armónicos.
+          n = i + 1;
+          this.radio = this.amp * (2 / p.PI) * (1 / p.sqrt(n));
+          this.puntoExterior.x += this.radio * p.cos(n * this.tiempo);
+          this.puntoExterior.y += this.radio * p.sin(n * this.tiempo);
+          break;
       }
       this.dibujaPolarStructure();
     }
@@ -130,10 +167,17 @@ export class PloterFourier {
     }
   }
 
+  /** Aplica un color de la paleta con alfa (0-255) al stroke actual. */
+  private strokePaleta(hex: string, alfa: number) {
+    const c = this.p.color(hex);
+    c.setAlpha(alfa);
+    this.p.stroke(c);
+  }
+
   dibujaAxis() {
     const p = this.p;
     p.push();
-    p.stroke(255, 100);
+    this.strokePaleta(this.colores.eje, 140);
     p.strokeWeight(1);
     p.line(this.initPlotTime.x - 50, this.initPlotTime.y, this.initPlotTime.x + 450, this.initPlotTime.y);
     p.line(this.initPlotTime.x, this.initPlotTime.y - this.amp * 2, this.initPlotTime.x, this.initPlotTime.y + this.amp * 2);
@@ -146,11 +190,12 @@ export class PloterFourier {
     const p = this.p;
     p.push();
     p.strokeWeight(1);
-    p.stroke(255, 100);
+    this.strokePaleta(this.colores.estructura, 120);
     p.noFill();
     p.ellipse(this.centroActual.x, this.centroActual.y, this.radio * 2);
     p.line(this.centroActual.x, this.centroActual.y, this.puntoExterior.x, this.puntoExterior.y);
     p.strokeWeight(3);
+    this.strokePaleta(this.colores.punto, 255);
     p.point(this.centroActual.x, this.centroActual.y);
     p.point(this.puntoExterior.x, this.puntoExterior.y);
     p.pop();
@@ -159,7 +204,7 @@ export class PloterFourier {
   dibujaBridgeStroke() {
     const p = this.p;
     p.push();
-    p.stroke(127);
+    this.strokePaleta(this.colores.puente, 130);
     p.line(this.puntoExterior.x, this.puntoExterior.y, this.initPlotTime.x, this.arrayWaveTime[0] + this.initPlotTime.y);
     p.pop();
   }
@@ -168,7 +213,7 @@ export class PloterFourier {
     const p = this.p;
     p.push();
     p.strokeWeight(3);
-    p.stroke(210, 120, 50, 100);
+    this.strokePaleta(this.colores.figura, 190);
     p.beginShape();
     p.noFill();
     for (let i = 0; i < this.arrayEspyro.length / 2; i += 2) {
@@ -182,7 +227,7 @@ export class PloterFourier {
     const p = this.p;
     p.push();
     p.strokeWeight(2);
-    p.stroke(200);
+    this.strokePaleta(this.colores.onda, 220);
     p.beginShape();
     p.noFill();
     for (let i = 0; i < this.arrayWaveTime.length; i++) {

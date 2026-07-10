@@ -1,49 +1,36 @@
 import type p5 from "p5";
 
 /**
- * "Bolita" sonda del `soundCollider`, portada de
- * `Talleres2021-CC2/.../libraries/Colisionador.js` a modo instancia.
- *
- * Es solo el círculo con el que se prueban las colisiones (la lógica de choque
- * vive en `Cajita`). Su `freq` mapea la posición X a una frecuencia audible en
- * escala logarítmica.
+ * "Bolita" detonadora del `soundCollider`: un círculo FIJO que el usuario coloca
+ * con el clic (hasta 8). Las cajas móviles lo cruzan y disparan una voz del
+ * sintetizador. Es solo geometría + dibujo con glow; la lógica de choque vive en
+ * `Cajita` y el disparo (con detección de flanco) en el sketch.
  */
 export class Colisionador {
   p: p5;
   dia: number;
   x: number;
   y: number;
-  col: p5.Color;
-  freq: number;
+  colHex: string;
 
-  constructor(p: p5, x: number, y: number, diametro: number) {
+  constructor(p: p5, x: number, y: number, diametro: number, colHex = "#ff8c1a") {
     this.p = p;
     this.dia = diametro;
     this.x = x;
     this.y = y;
-    this.col = p.color(255, 0, 0);
-    this.freq = this.logaritmicConv(this.x, 0, p.width, 20, 20000);
+    this.colHex = colHex;
   }
 
   mostrar() {
     const p = this.p;
+    p.push();
     p.noStroke();
-    p.fill(this.col);
-    p.ellipse(this.x, this.y, this.dia, this.dia);
-  }
-
-  mostrarActual(x: number, y: number) {
-    this.x = x;
-    this.y = y;
-    this.mostrar();
-  }
-
-  logaritmicConv(posicion: number, min: number, max: number, minLog: number, maxLog: number) {
-    const minp = min;
-    const maxp = max;
-    const minv = Math.log(minLog);
-    const maxv = Math.log(maxLog);
-    const scale = (maxv - minv) / (maxp - minp);
-    return Math.exp(minv + scale * (posicion - minp));
+    const glow = p.color(this.colHex);
+    glow.setAlpha(70);
+    p.fill(glow);
+    p.circle(this.x, this.y, this.dia * 1.8);
+    p.fill(this.colHex);
+    p.circle(this.x, this.y, this.dia);
+    p.pop();
   }
 }

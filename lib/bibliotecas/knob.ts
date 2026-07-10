@@ -99,7 +99,7 @@ export class Knob {
     indicador.style("width", "3px");
     indicador.style("height", `${diametro * 0.35}px`);
     indicador.style("background", "#00ff41");
-    indicador.style("transform-origin", `50% ${diametro * 0.15}px`);
+    indicador.style("transform-origin", `50% ${diametro * 0.45}px`);
     indicador.style("pointer-events", "none");
     this.indicador = indicador;
 

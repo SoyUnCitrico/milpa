@@ -17,6 +17,14 @@ import type { SketchFactory } from "../types";
  * para conservar la velocidad del original sin alterar el default de
  * `spectografo`.
  */
+/**
+ * Neones cyberpunk (tokens del sitio) para tintar cada armónico de la columna,
+ * así cada epiciclo individual se distingue del de arriba/abajo. La `figura`
+ * (espirógrafo) y la `onda` de cada fila toman un color del ciclo; la estructura
+ * verde y los nodos se heredan de la paleta base de `PloterFourier`.
+ */
+const NEONES = ["#00e5ff", "#00ff41", "#a855f7", "#ffae42", "#c98bff", "#33ff77"];
+
 export const sumador: SketchFactory = (p: p5) => {
   const numGraficas = 6;
   const factor = 0.8;
@@ -44,6 +52,11 @@ export const sumador: SketchFactory = (p: p5) => {
         amplitudeGraf,
         armonicos,
       );
+      // Cada armónico con su propio neón (figura + onda); el resto de la paleta
+      // cyberpunk (estructura/nodos/eje) se hereda de PloterFourier.
+      const neon = NEONES[i % NEONES.length];
+      grafica.colores.figura = neon;
+      grafica.colores.onda = neon;
       graficas[i] = grafica;
       amplitudeGraf = amplitudeGraf * factor;
     }

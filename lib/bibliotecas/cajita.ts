@@ -1,9 +1,6 @@
 import type p5 from "p5";
 import type { Colisionador } from "./colisionador";
 
-/** Callback que dispara la caja al ser golpeada (desacopla el audio del sketch). */
-export type OnHitCajita = (nota: number, freq: number) => void;
-
 /**
  * Solapamiento círculo-rectángulo (reimplementa `collideRectCircle` de
  * p5.collide2d, que no está en el core). Rectángulo en esquina (x,y).
@@ -24,109 +21,85 @@ function colisionRectCirculo(
   return Math.sqrt(distX * distX + distY * distY) <= diametro / 2;
 }
 
-/** Solapamiento rectángulo-rectángulo (AABB), reimplementa `collideRectRect`. */
-function colisionRectRect(
-  x1: number,
-  y1: number,
-  w1: number,
-  h1: number,
-  x2: number,
-  y2: number,
-  w2: number,
-  h2: number,
-): boolean {
-  return x1 + w1 >= x2 && x1 <= x2 + w2 && y1 + h1 >= y2 && y1 <= y2 + h2;
-}
-
 /**
  * Caja móvil del `soundCollider`, portada de
- * `Talleres2021-CC2/.../libraries/CajitaCollide.js` (clase `Cajita`) a modo
- * instancia. Avanza a la derecha y reaparece por la izquierda; al chocar con un
- * `Colisionador` cambia de color y dispara el sonido vía `onHit` (en el original
- * llamaba directamente a los globales de audio del sketch; aquí se desacopla).
+ * `Talleres2021-CC2/.../libraries/CajitaCollide.js` a modo instancia y
+ * reelaborada:
+ *   - Se mueve a la derecha (con factor de velocidad propio) y DERIVA en Y con
+ *     ruido Perlin, así las cajas no son estáticas ni van en filas fijas.
+ *   - Su TAMAÑO determina la nota (la calcula el sketch a partir de `tam()`).
+ *   - Ya no dispara audio: solo expone `chocaCon()` (test puro) y `setHit()`
+ *     (parpadeo). El disparo con detección de flanco lo hace el sketch, usando
+ *     `colisionesPrevias` para no retriggerear cada frame.
  */
 export class Cajita {
   p: p5;
   x: number;
   y: number;
+  baseY: number;
   w: number;
   h: number;
-  color: p5.Color;
-  colorOriginal: p5.Color;
-  hit: boolean;
   id: number;
-  note: number;
-  velocidad: number;
-  freq: number;
-  onHit: OnHitCajita;
+  colorBase: p5.Color;
+  colorHit: p5.Color;
+  private hit: boolean;
+  private velFactor: number;
+  private faseRuido: number;
+  private driftY: number;
+  /** Ids de colisionadores con los que ya estaba chocando el frame anterior. */
+  colisionesPrevias: Set<number>;
 
-  constructor(
-    p: p5,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    id: number,
-    onHit: OnHitCajita = () => {},
-  ) {
+  constructor(p: p5, x: number, y: number, w: number, h: number, id: number, colorHex: string) {
     this.p = p;
     this.x = x;
     this.y = y;
+    this.baseY = y;
     this.w = w;
     this.h = h;
-    this.color = p.color(p.random(0, 150), p.random(80, 200), p.random(80, 220));
-    this.colorOriginal = this.color;
+    this.id = id;
+    this.colorBase = p.color(colorHex);
+    this.colorBase.setAlpha(120);
+    this.colorHit = p.color("#00ff41");
     this.hit = false;
-    this.id = id || 0;
-    this.note = Math.floor(p.random(40, 88));
-    this.velocidad = 1;
-    this.freq = 440;
-    this.onHit = onHit;
+    this.velFactor = p.random(0.6, 1.4);
+    this.faseRuido = p.random(1000);
+    this.driftY = p.random(40, 120);
+    this.colisionesPrevias = new Set();
   }
 
-  revisarSuperposicion(objArray: Cajita[]) {
+  /** Tamaño representativo (promedio ancho/alto) para mapear a nota. */
+  tam(): number {
+    return (this.w + this.h) / 2;
+  }
+
+  actualizar(velBase: number) {
     const p = this.p;
-    for (let i = 0; i < objArray.length; i++) {
-      if (this.id !== i) {
-        const colision = colisionRectRect(
-          this.x, this.y, this.w, this.h,
-          objArray[i].x, objArray[i].y, objArray[i].w, objArray[i].h,
-        );
-        if (colision) {
-          this.x = p.random(p.width);
-          this.y = p.random(p.height);
-        }
-      }
-    }
+    this.x += velBase * this.velFactor;
+    if (this.x > p.width) this.x = -this.w;
+    this.faseRuido += 0.006;
+    this.y = this.baseY + (p.noise(this.faseRuido) - 0.5) * this.driftY;
   }
 
-  revisaColision(obj: Colisionador) {
-    this.hit = colisionRectCirculo(this.x, this.y, this.w, this.h, obj.x, obj.y, obj.dia);
-    if (this.hit) {
-      this.color = obj.col;
-      this.freq = obj.freq;
-      this.onHit(this.note, obj.freq);
-    } else {
-      this.color = this.colorOriginal;
-    }
+  chocaCon(obj: Colisionador): boolean {
+    return colisionRectCirculo(this.x, this.y, this.w, this.h, obj.x, obj.y, obj.dia);
+  }
+
+  setHit(hit: boolean) {
+    this.hit = hit;
   }
 
   mostrar() {
     const p = this.p;
+    p.push();
     p.noStroke();
-    p.fill(this.color);
-    this.actualizar();
-    p.rect(this.x, this.y, this.w, this.h);
-  }
-
-  actualizar() {
-    this.x += this.velocidad;
-    if (this.x > this.p.width) {
-      this.x = -this.w;
+    if (this.hit) {
+      const glow = p.color("#00ff41");
+      glow.setAlpha(60);
+      p.fill(glow);
+      p.rect(this.x - 4, this.y - 4, this.w + 8, this.h + 8);
     }
-  }
-
-  setVelocidad(vel: number) {
-    this.velocidad = vel;
+    p.fill(this.hit ? this.colorHit : this.colorBase);
+    p.rect(this.x, this.y, this.w, this.h);
+    p.pop();
   }
 }

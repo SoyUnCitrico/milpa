@@ -29,7 +29,7 @@ export default function NeblinaReveal({ children }: { children: ReactNode }) {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 2.4, ease: "easeOut" }}
+        transition={{ duration: 3.5, ease: "easeOut" }}
       >
         {children}
       </motion.div>

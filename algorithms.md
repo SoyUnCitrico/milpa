@@ -515,6 +515,88 @@ original.
 
 ---
 
+### Mouse Paint — pintura por capas + polígono por vértices
+
+Herramienta de pintura interactiva. No comparte estructura ni propósito visual
+con ninguna otra pieza (es acumulación libre dirigida por el usuario, no un
+sistema generativo autónomo), así que va aparte, sin forzar una familia.
+
+**Arquitectura de dos capas.** El original acumulaba directo sobre el canvas y
+nunca limpiaba el fondo. Aquí el trazo persistente vive en un buffer offscreen
+`p.createGraphics(W, H)` (`capaPintura`) que **se mantiene transparente** y solo
+guarda las marcas (brochas y figuras cerradas confirmadas). Cada frame el
+`draw()` del canvas principal hace, en orden: `background(colorFondo)` →
+`image(capaPintura, 0, 0)` → overlay transitorio. Consecuencias:
+- **Fondo no destructivo**: el color de fondo se repinta detrás de la capa cada
+  frame, nunca se hornea en ella, así que cambiarlo no borra lo pintado.
+- **Overlay sin embarrar**: como el canvas se reconstruye cada frame desde la
+  capa, se puede dibujar encima lo transitorio (preview de la figura en curso,
+  contorno del cursor de tamaño, HUD de estado) sin que se acumule.
+
+**Brochas como funciones** (una figura = una función, dibujan sobre la capa):
+`cuadrado` (rect rotante del original, `angBrocha += 0.15` por estampa),
+`circular` (elipse sólida), `linea` (segmento de `pmouse` a `mouse` mientras se
+arrastra), y dos compuestas: `aerografo` (salpicado de puntos con jitter polar,
+densidad ∝ tamaño) y `roseton` (N copias de un pétalo rotadas alrededor del
+punto). Un dispatcher aplica la brocha activa en `mousePressed`/`mouseDragged`.
+
+**Polígono por vértices.** En modo figura cada click empuja `{x, y}` a un array;
+`c` confirma con `beginShape()` / `vertex()` / `endShape(CLOSE)` sobre la capa,
+con `stroke` = color de borde y `fill` = color de relleno (por defecto igual al
+de brocha), y limpia el array. Mientras se construye, el overlay previsualiza la
+polilínea abierta más un marcador por vértice.
+
+Colores extraídos a `PALETA` (identidad matrix/neon: fondo negro casi puro,
+brocha verde neón, borde naranja) usados como valor inicial de los selectores
+`createColorPicker`. `saveCanvas` guarda el canvas principal, que incluye la
+pintura porque el `draw()` blitea la capa cada frame.
+
+### Trayectorias — composición paramétrica en capas translúcidas
+
+No se unifica con ninguna familia de arriba. Aunque comparte el motivo de la
+"opacidad modulada por ruido" con la familia **Revolución**, no cumple 2/3 de
+"Cómo decidir": ni la estructura matemática (aquí son trayectorias paramétricas
+independientes —anillos polares, senoidal, Lissajous, convergencia lineal—, no
+la línea giratoria sobre órbita circular del arquetipo) ni el propósito visual
+(composición estratificada en cuatro capas superpuestas vs. una única línea que
+gira y graba su estela) coinciden. Va aparte, sin biblioteca compartida ni
+referencias cruzadas.
+
+Cuatro capas paramétricas trazadas sobre un mismo timeline `t ∈ [0,1]`
+(`millis()` mapeado sobre `duration`), acumulándose sobre un fondo persistente
+(el `background` solo corre en `setup` / al reiniciar), todas con alfa bajo para
+que se mezclen por transparencia:
+
+- **Fondo — anillos concéntricos** (`fondoConcentrico`): un anillo por frame a
+  radio `t · rMax`, dibujado como `beginShape()` de vértices polares con el
+  radio deformado por `noise(cos, sin, r·k + ns)`; la opacidad del stroke se
+  modula por el radio (`map(r, 0, rMax, 45, 6)`, anillos exteriores más tenues)
+  multiplicado por el ruido. Al acumularse graba un patrón de anillos que crecen
+  desde el centro.
+- **Senoidal** (`capaSenoidal` + `traySin`): la senoidal del original, pero con
+  el recorrido VERTICAL — `y = t·h` avanza de arriba hacia abajo y `x` oscila
+  alrededor del centro (antes era X el que barría el canvas).
+- **Lissajous central** (`capaLissajous` + `trayLissa`): figura de Lissajous
+  trazada como segmentos unidos (`line(prev, actual)`). Los períodos `perX`/
+  `perY` se exponen con dos `Knob` ("Período X" / "Período Y", 1..8 enteros);
+  cambiar cualquiera llama `reiniciar()` (resetea el timeline, limpia el fondo y
+  hace `p.loop()`) para volver a trazar la figura desde cero. Al completarse el
+  timeline la pieza hace `noLoop()`.
+- **Convergencia** (`capaConvergencia` + `trayConverge` + `brechaDiagonales`):
+  dos trayectorias que interpolan linealmente desde las esquinas inferiores
+  hacia el punto de convergencia (centro-X, arriba). No se dibujan como curva
+  continua sino con BRECHAS de líneas diagonales — cada tres frames un batch de
+  seis líneas paralelas inclinadas hacia el punto de convergencia, con offset
+  perpendicular; al acumularse forman dos flujos de líneas que se juntan arriba.
+
+Colores RGB crudos del original (azul/rojo/verde) re-mapeados a la paleta
+cyberpunk `PALETA` (cian de fondo, verde neón matrix la senoidal, naranja neón
+la Lissajous, violeta/orquídea las dos trayectorias de convergencia), todo con
+alfa bajo para la mezcla por capas. Se eliminó la trayectoria logarítmica del
+original y el `CCapture`.
+
+---
+
 ## Átomos de Píxel (aparte)
 
 Algoritmo de descomposición de imagen en partículas, portado de un sketch de
