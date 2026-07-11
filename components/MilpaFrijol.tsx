@@ -182,7 +182,7 @@ export default function MilpaFrijol() {
     <div ref={ref} aria-hidden className="pointer-events-none absolute inset-0 z-0">
       {renderCapa(false)}
       {/* El tallo de la milpa (antes vivía directo en page.tsx). */}
-      <div className="absolute left-1/2 top-0 h-full md:w-9 sm:w-4 -translate-x-1/2 rounded-full bg-gradient-to-b from-matrix-dim via-matrix-green to-matrix-glow shadow-glow-green" />
+      <div className="absolute left-1/2 top-0 h-full md:w-9 w-6 -translate-x-1/2 rounded-full bg-gradient-to-b from-matrix-dim via-matrix-green to-matrix-glow shadow-glow-green" />
       {renderCapa(true)}
     </div>
   );
