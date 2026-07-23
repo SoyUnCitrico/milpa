@@ -34,6 +34,8 @@ import { spectografo } from "./spectografo";
 import { audioGraf } from "./audioGraf";
 import { synth } from "./synth";
 import { atomosPixel } from "./atomosPixel";
+import { florManos } from "./florManos";
+import { florShader } from "./florShader";
 
 
 const baseImage = "https://amazons3-images-micel10.s3.us-east-2.amazonaws.com/images/gallery/";
@@ -733,6 +735,62 @@ export const sketches: SketchEntry[] = [
       height: 720,
     },
     factory: atomosPixel,
+  },
+  {
+    meta: {
+      slug: "flor-manos",
+      title: "Flor de Manos",
+      author: "emm3",
+      source: "milpa/lib/sketches/florManos.ts",
+      description: "Flor generativa que se abre y se cierra con las manos. Cuatro anillos de partículas en coordenadas polares (corazón, corona, semillas y pétalos) giran en sentidos contrarios sobre un fondo que deja estela, con la misma geometría de Spiral Gira. La diferencia: los parámetros no laten solos, los dicta un modelo de visión que lee las manos por la cámara — la pinza entre pulgar e índice estira los pétalos, los dedos levantados deciden cuántos son, separar las manos abre la flor, cerrar el puño la contrae, y la posición de la mano corre el color y la velocidad de giro. Sin cámara la pieza funciona igual con perillas; el recuadro de abajo a la derecha muestra qué está viendo el modelo.",
+      tags: ["MediaPipe", "manos", "cámara", "IA", "espirales", "generativo", "interactivo"],
+      image: `${baseImage}flor-manos.png`,
+      controls: [
+        { key: "Cámara", action: "Botón: enciende el rastreo y deja que las manos manden sobre los parámetros." },
+        { key: "menú de cámara", action: "Elegir qué cámara usar; 'Buscar cámaras' pide permiso y muestra los nombres reales." },
+        { key: "pinza", action: "Separar pulgar e índice: tamaño de los pétalos." },
+        { key: "dedos", action: "Dedos levantados (ambas manos): número de pétalos, de 5 a 40." },
+        { key: "manos", action: "Separar o juntar las dos manos: apertura de la flor (radio)." },
+        { key: "puño", action: "Abrir o cerrar el puño: tamaño del corazón y densidad de las semillas." },
+        { key: "posición", action: "Mover la mano: horizontal cambia el tono de los pétalos, vertical la velocidad de giro." },
+        { key: "perillas", action: "Pétalos, tamaño, apertura, tono y giro — los mismos parámetros sin cámara." },
+        { key: "HUD / h", action: "Mostrar u ocultar el preview de cámara y la lectura de gestos." },
+        { key: "Guardar / s", action: "Guardar el canvas como PNG." },
+      ],
+      needsAudio: false,
+      width: 900,
+      height: 900,
+    },
+    factory: florManos,
+  },
+  {
+    meta: {
+      slug: "flor-shader",
+      title: "Flor de Shader",
+      author: "emm3",
+      source: "milpa/lib/sketches/florShader.ts",
+      description:
+        "Flor de tres cuerpos en WEBGL sobre un fondo de oleaje, cada cuerpo con su textura procedural en GLSL —sin una sola imagen— y el tono ciclando en loop infinito. La corona de pétalos es una malla en forma de dona: un perfil polar de lóbulos (de 3 a 10 pétalos), ahuecado como cuenco, con nervaduras de ruido fractal, bandas iridiscentes que recorren rojos, rosas y violetas pero nunca verde, y un reflejo que persigue a la mano. En el hueco central flota un núcleo esférico de textura celular pulsante; del núcleo baja un tallo de cilindros verdes hacia el suelo, y detrás de todo ondula un mar de olas suaves. Las manos, leídas por la cámara, gobiernan los tres cuerpos: los dedos y la pinza rehacen los pétalos, separar las manos agranda el núcleo, subir la mano alarga el tallo. Y si cerrás los ojos, guarda la imagen. Sin cámara se maneja con las perillas.",
+      tags: ["shader", "GLSL", "WEBGL", "malla", "dona", "MediaPipe", "manos", "parpadeo", "procedural", "flor"],
+      controls: [
+        { key: "Cámara", action: "Botón: enciende el rastreo y deja que las manos gobiernen los tres cuerpos." },
+        { key: "menú de cámara", action: "Elegir qué cámara usar; 'Buscar cámaras' pide permiso y muestra los nombres reales." },
+        { key: "dedos", action: "Dedos levantados (ambas manos): número de pétalos de la dona, de 3 a 10." },
+        { key: "pinza", action: "Separar pulgar e índice: forma del pétalo, de redondo a afilado." },
+        { key: "puño", action: "Abrir o cerrar el puño: cuánto se ahueca la corona (cuenco)." },
+        { key: "manos", action: "Separar o juntar las dos manos: tamaño del núcleo esférico." },
+        { key: "altura", action: "Subir o bajar la mano: largo del tallo hacia el suelo." },
+        { key: "cerrar los ojos", action: "Con la cámara encendida, guarda la imagen (detección de parpadeo)." },
+        { key: "perillas", action: "Pétalos, forma, cuenco, núcleo y tallo — los mismos parámetros sin cámara." },
+        { key: "tono", action: "Cicla solo, en loop infinito (no hay control)." },
+        { key: "HUD / h", action: "Mostrar u ocultar el preview de cámara y la lectura de gestos." },
+        { key: "Guardar / s", action: "Guardar el canvas como PNG." },
+      ],
+      needsAudio: false,
+      width: 900,
+      height: 900,
+    },
+    factory: florShader,
   },
 ];
 

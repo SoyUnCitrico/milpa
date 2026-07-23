@@ -61,6 +61,19 @@ async function concatenarPde(dirOrigen, principal) {
   return trozos.join("\n");
 }
 
+// Piezas ORIGINALES de la galería (no portadas del monorepo legacy): su
+// `source` es `milpa/<ruta dentro de este repo>`, así el enlace de GitHub
+// apunta a este mismo repo y el panel de código muestra el sketch en sí. El
+// archivo no está un nivel arriba sino aquí, así que se resuelve desde la raíz
+// del proyecto en vez de la del monorepo.
+const REPO_PROPIO = "milpa";
+
+function origenDe(source) {
+  const [repo, ...resto] = source.split("/");
+  if (repo === REPO_PROPIO) return path.join(projectRoot, ...resto);
+  return path.join(monorepoRoot, source);
+}
+
 async function main() {
   const sources = await readSources();
   if (sources.length === 0) {
@@ -73,7 +86,7 @@ async function main() {
   let missing = 0;
 
   for (const source of sources) {
-    const from = path.join(monorepoRoot, source);
+    const from = origenDe(source);
     const to = path.join(originalsDir, source);
 
     if (await exists(from)) {

@@ -7,7 +7,14 @@ pueda ubicar rápido en una familia existente, o documentarse aparte si no
 encaja en ninguna sin forzarlo.
 
 Se completa de forma incremental — cada vez que un sketch se unifica (ver
-`.claude/agents/sketch-unifier.md`), se agrega o actualiza su entrada aquí.
+`.claude/agents/sketch-unifier.md`) o se crea uno nuevo (ver
+`.claude/agents/sketch-creator.md`), se agrega o actualiza su entrada aquí, más
+una línea en el **Registro histórico** al final del documento.
+
+Antes de escribir un algoritmo nuevo, buscar aquí si ya existe: las familias
+apuntan a la biblioteca de `lib/bibliotecas/` que hay que **importar** en vez de
+reimplementar. La estructura común de toda pieza nueva vive en
+`lib/sketches/_plantilla.ts`.
 
 ## Cómo decidir: ¿unificar o dejar aparte?
 
@@ -55,6 +62,15 @@ Usado por:
   (no comparte tonos con la variante violeta de `girasol.ts`).
 - **Spiral One** (`spiralOne.ts`) — referencia cruzada, aún no revisado;
   variante de tres espirales concéntricas con ping-pong de radio.
+- **Flor de Manos** (`florManos.ts`) — misma geometría de cuatro capas que
+  `spiralGira`, pero los radios, el tamaño de partícula, los ciclos y el número
+  de pétalos no hacen ping-pong autónomo: los fija el gesto de las manos leído
+  por MediaPipe (ver "Gestos de mano como parámetros" abajo). Como `Spiral`
+  congela `totalParticles` en el constructor, cambiar el número de pétalos
+  **reconstruye esa capa**; el resto se ajusta en vivo con los `set*`. El color
+  vivo se aplica sobre las partículas (`Particle.r/g/b`) porque
+  `Spiral.setColor` solo guarda el string y cada `Particle` deriva sus canales
+  al construirse.
 
 ### Relieve por ruido Perlin, tema matrix
 
@@ -595,6 +611,171 @@ la Lissajous, violeta/orquídea las dos trayectorias de convergencia), todo con
 alfa bajo para la mezcla por capas. Se eliminó la trayectoria logarítmica del
 original y el `CCapture`.
 
+### Gestos de mano como parámetros (biblioteca `RastreadorManos`, `lib/bibliotecas/manosMediaPipe.ts`)
+
+Capa de entrada, no de dibujo: convierte visión por computadora en números
+normalizados que cualquier pieza puede usar como si fueran perillas. El modelo
+**MediaPipe Hand Landmarker** (red neuronal de Google, WASM + `.task` por CDN)
+devuelve 21 landmarks 3D por mano; la biblioteca los reduce a gestos estables:
+
+- **Escala invariante a la profundidad**: todas las distancias se dividen por
+  `dist(muñeca, nudillo del medio)`, así acercar la mano a la cámara no
+  dispara los parámetros.
+- **Dedo levantado**: la punta queda más lejos de la muñeca que su falange
+  media (`> 1.08×`). Comparar solo la `y` de punta vs. falange —el criterio
+  típico— falla en cuanto el usuario gira la muñeca; la distancia radial no.
+  El pulgar se evalúa aparte (se abre lateralmente, no se dobla igual).
+- **Pinza**: distancia pulgar–índice normalizada. **Apertura**: extensión
+  promedio de los cuatro dedos, 0 (puño) a 1 (mano abierta). **Separación**:
+  distancia entre los centros de palma de ambas manos.
+- Coordenadas **espejadas en X** en la propia biblioteca, para que la pieza
+  responda como espejo sin que cada sketch lo recuerde.
+
+Detalles de integración: el import de `@mediapipe/tasks-vision` es **dinámico**
+dentro de `iniciar()` (toca `window`/WASM, rompería el SSR de Next, mismo
+criterio que Tone.js); `detectForVideo` solo corre si `video.currentTime`
+avanzó; `iniciar(deviceId)` es reentrante, así cambiar de cámara no recarga el
+modelo. La cámara la maneja `Camara` de `lib/bibliotecas/camara.ts` — ver
+abajo.
+
+**Detección de parpadeo (opcional):** si se pasa `onParpadeo` al constructor, se
+carga además el **Face Landmarker** con `outputFaceBlendshapes` sobre el mismo
+video. En cada frame se leen los blendshapes `eyeBlinkLeft`/`eyeBlinkRight`;
+cuando ambos superan el umbral, `ojosCerrados` se pone en true y el callback se
+dispara en el **flanco** de cierre (con un refractario) — un parpadeo ejecuta la
+acción una sola vez. Es un segundo modelo, así que solo se carga si la pieza lo
+pide. Lo usa `florShader.ts` para guardar la imagen al cerrar los ojos.
+
+### Entrada por cámara (biblioteca `camara.ts`)
+
+Infraestructura compartida para cualquier pieza que use la cámara:
+`enumerarCamaras()`, `pedirPermiso()`, `SelectorCamara` (menú + botón "Buscar
+cámaras") y `Camara` (abre el stream sobre un `<video>` propio). Generaliza lo
+que la pantalla de configuración de Átomos de Píxel
+(`lib/bibliotecas/atomosPixel/pantallaConfig.ts`) resolvía solo para esa pieza.
+
+Tres trampas que motivan la biblioteca, y que conviene no volver a pisar:
+
+1. `p.createCapture(VIDEO)` **no deja elegir dispositivo**: con webcam
+   integrada + externa (o frontal/trasera en celular) abre la que quiera el
+   navegador y el usuario no tiene cómo corregirlo.
+2. `enumerateDevices()` devuelve los `label` **vacíos** mientras no haya
+   permiso concedido, así que el menú se puebla con nombres genéricos: hace
+   falta un botón que pida `getUserMedia` (y corte los tracks al instante) para
+   volver a enumerar ya con nombres reales.
+3. `.hide()` sobre el `<video>` de la captura le pone `display:none`, y un
+   video así puede **dejar de decodificar frames** — con lo que la inferencia
+   por frame se congela sin ningún error visible. `Camara` lo esconde
+   moviéndolo fuera de pantalla (`left: -10000px`), que sí sigue reproduciendo.
+
+El `<video>` se crea con `p.createElement`, así queda dentro del contenedor del
+sketch: p5 lo destruye al desmontar y `P5Sketch.tsx` además corta el
+`MediaStream`.
+
+Usado por:
+- **Flor de Manos** (`florManos.ts`), vía `RastreadorManos`.
+
+Consumido por:
+- **Flor de Shader** (`florShader.ts`) — gestos repartidos entre sus tres
+  cuerpos: dedos → pétalos, pinza → agudeza y puño → cuenco (dona), separación
+  de manos → tamaño del núcleo esférico, altura de la mano → largo del tallo.
+  El tono cicla solo. Ver su sección propia.
+- **Flor de Manos** (`florManos.ts`) — primera pieza. Mapeo:
+  pinza → tamaño de pétalo, dedos levantados → número de pétalos (5–40),
+  separación de manos → radio de apertura, apertura de puño → corazón y
+  densidad de semillas, posición de la mano → tono (X) y velocidad de giro (Y).
+  Todos los valores pasan por interpolación exponencial hacia el objetivo
+  (`suave()`, factor 0.1) porque la lectura del modelo salta frame a frame y
+  sin suavizado la flor tiembla. Los mismos parámetros quedan expuestos como
+  `Knob`, así la pieza es usable sin cámara ni permiso.
+
+### Flor de Shader — dona + núcleo + tallo, texturas procedurales en GLSL
+
+Única pieza de la galería con shaders propios, y la única que construye
+geometría 3D (malla inmediata + esfera y cilindros retenidos) en vez de dibujar
+figuras 2D. **Tres cuerpos**, cada uno con su fragment shader, sobre un ruido de
+valor + fbm compartido (`NOISE_GLSL`, concatenado en los tres):
+
+**1. Corona de pétalos (dona).** Perfil polar de lóbulos:
+
+```
+r(θ) = tamaño · radioNorm · (0.34 + 0.66 · |cos(nPétalos·θ/2)|^agudeza) · irregular(θ)
+radioNorm = agujero + u·(1 − agujero)   // u ∈ [0,1] → [agujero, 1]
+```
+
+El lóbulo vale 1 sobre el eje de cada pétalo y 0 entre pétalos; `agudeza`
+decide si el pétalo es redondo (bajo) o afilado (alto). El anillo interior
+arranca en `agujero` en vez de 0, así el centro queda **hueco como una dona**;
+`u`/`v` (UV) siguen yendo 0→1 para que el shader coloree igual. Se muestrea en
+`anillos × segmentos`, con `z = -curvatura·tamaño·u²` (cuenco) y se cose con
+`TRIANGLE_STRIP`. La irregularidad es `noise(cos θ, sin θ, t)`: muestrear sobre
+el **círculo unitario** hace que θ=0 y θ=2π coincidan, cerrando la vuelta sin
+costura. El fragment shader: fbm con **dominio deformado** (`fbm(q + fbm(q·1.7))`,
+nervaduras en vez de manchas), bandas concéntricas, **paleta coseno**
+(`a + b·cos(2π(c·t + d))`, iridiscente) y un especular que sigue la mano
+(exponente 9 y luz fuera del centro: en `(0.5,0.5)` quemaría el borde interior a
+blanco). El vertex shader mece las puntas con una onda amplificada por `u²`. La
+paleta de la corona **evita el verde**: baja base y amplitud en el canal G, más
+un tope duro `col.g = min(col.g, max(col.r, col.b))` que hace matemáticamente
+imposible que el verde domine en cualquier fase del tono (el verde queda para el
+tallo). Los pétalos están limitados a 3–10.
+
+**Fondo de oleaje.** Un cuarto shader dibuja un mar de olas suaves como telón:
+cuad de pantalla completa cuyo vertex shader ignora cámara/proyección y mapea la
+UV (0–1) directo a clip space, así llena el lienzo sin importar la perspectiva.
+Se dibuja primero con `gl.disable(DEPTH_TEST)`. El fragment es fbm + senoidales
+lentas desplazando bandas horizontales, en azules oceánicos oscuros para que la
+flor resalte.
+
+**2. Núcleo esférico.** Una `p.sphere()` en el hueco de la dona, empujada al
+frente. Textura celular pulsante (`mix(fbm(uv·7), fbm(uv·15))`) con el tono
+**+0.5** respecto a los pétalos para que contraste. Sombreado 3D real:
+difuso + rim sobre la normal en espacio de vista.
+
+**3. Tallo.** Pila de `talloSeg` cilindros (`p.cylinder()`, eje Y → caen al
+suelo) que se adelgazan hacia la punta y se desvían con `sin` acumulado (curva
+orgánica). Fragment shader verde: fibras verticales de fbm + venas, con difuso y
+rim.
+
+**Sombreado de los sólidos:** el vertex shader de núcleo y tallo declara
+`uNormalMatrix` — p5 solo inyecta esa matriz **si el shader la declara** (ver
+`Shader._setMatrixUniforms`), y con ella se computa la normal en espacio de
+vista para el difuso/rim. La corona no la necesita (es una superficie plana
+teñida por su UV).
+
+**Apilado por capas (lejana → cercana):** tallo, luego núcleo, luego pétalos
+encima. En WEBGL el orden de dibujo no basta —el z-buffer resuelve la oclusión
+por profundidad real— así que entre capa y capa se hace
+`gl.clear(DEPTH_BUFFER_BIT)`: cada cuerpo conserva su 3D interno pero el
+siguiente lo pinta encima por completo (algoritmo del pintor **por capa**). Así
+los pétalos tapan el núcleo salvo en el hueco de la dona, y el tallo nace desde
+detrás de la flor sin depender de ajustar los z a mano.
+
+**Tono en loop infinito:** un contador avanza `velTono` por frame (módulo 1000
+para no perder precisión) y alimenta el uniform de tono de los tres shaders; no
+hay perilla de tono.
+
+No comparte biblioteca con la familia de **espirales polares**: allí se colocan
+partículas independientes en coordenadas polares, aquí se teje una superficie
+continua con UVs y se combinan primitivas 3D. Comparte el propósito visual (una
+flor) pero no la estructura ni el modo de dibujo — 1 de 3 en "Cómo decidir".
+
+Notas de WEBGL que costaron y conviene recordar:
+- El HUD de texto va en un `PanelEstado` (`lib/bibliotecas/boton.ts`), no en
+  `p.text`: en WEBGL `text()` exige una fuente cargada con `loadFont`. El mismo
+  panel resuelve el problema simétrico en las piezas 2D con fondo translúcido,
+  donde el texto dibujado en el canvas se sobreimprime hasta ser ilegible.
+- El preview de cámara necesitó que `RastreadorManos.dibujarPreview` compusiera
+  en un `p5.Graphics` 2D — `drawingContext` en WEBGL no es un contexto 2D y no
+  tiene `drawImage`.
+- **`noTint()` es veneno en WEBGL con p5 1.9.4**: deja `_tint` en `null` y el
+  `_setFillUniforms` del `RendererGL` llama `setUniform("uTint", null)`, que
+  revienta con `Cannot read properties of null (reading 'slice')` y mata el
+  `draw()`. Para un tinte neutro va `tint(255)`.
+- Los nodos viven en `Float32Array` preasignados y se reescriben en el sitio:
+  la geometría se recalcula entera cada frame (~2000 vértices) y reasignar esos
+  arrays sería basura constante para el GC.
+
 ---
 
 ## Átomos de Píxel (aparte)
@@ -608,3 +789,22 @@ colonización de espacios) sobre 7 tipos de flow field. No comparte estructura
 ni propósito visual con ninguna otra pieza de la galería — se documenta aquí
 en solitario, sin forzar una familia ni referencias cruzadas, tal como pide
 la convención de este documento.
+
+---
+
+## Registro histórico
+
+Acumulativo: cada pieza creada o unificada agrega una línea al final. No se
+reescriben ni se borran entradas anteriores.
+
+| Fecha | Slug | Cambio |
+|-------|------|--------|
+| 2026-07-22 | — | Plantilla `lib/sketches/_plantilla.ts`, biblioteca `boton.ts` (botón/interruptor táctil) y agente `sketch-creator` para piezas nuevas. Inicio del registro. |
+| 2026-07-22 | `flor-manos` | Pieza nueva: flor generativa sobre la familia de espirales polares (`Spiral`), con los parámetros dictados por gestos de mano. Biblioteca nueva `manosMediaPipe.ts` (MediaPipe Hand Landmarker → gestos normalizados) y dependencia `@mediapipe/tasks-vision`. |
+| 2026-07-22 | `flor-shader`, `flor-manos` | Arreglo del preview de cámara: `noTint()` rompía el `draw()` en WEBGL (p5 1.9.4 pasa `uTint: null` al shader) → `tint(255)`. El texto de estado pasa a `PanelEstado` (nuevo en `boton.ts`), que evita tanto la falta de fuente en WEBGL como la sobreimpresión del texto en las piezas de fondo translúcido. |
+| 2026-07-22 | `flor-shader` | Pieza nueva: malla polar de pétalos (nodos generativos + `TRIANGLE_STRIP` con UVs) llena con un shader GLSL propio de textura procedural (fbm con dominio deformado, paleta coseno, especular que sigue la mano), gobernada por los mismos gestos que `flor-manos`. `dibujarPreview` de `manosMediaPipe.ts` pasa a componer en un `p5.Graphics` 2D para funcionar también en WEBGL. |
+| 2026-07-22 | `flor-shader` | Rediseño a tres cuerpos: la corona pasa a forma de **dona** (hueco central), se agrega un **núcleo esférico** (textura celular, tono desfasado) en el hueco y un **tallo** de cilindros verdes hacia el suelo, cada uno con su fragment shader (ruido fbm compartido, sombreado por `uNormalMatrix` en los sólidos). El **tono cicla en loop infinito**; las perillas Tamaño/Brillo/Tono se reemplazan por Núcleo y Tallo, gestos de separación y altura de mano remapeados. |
+| 2026-07-22 | `flor-shader` | Ajuste de composición: núcleo más chico respecto a los pétalos y **apilado por capas** (tallo → núcleo → pétalos, de lejana a cercana) con `gl.clear(DEPTH_BUFFER_BIT)` entre capas, para que los pétalos queden siempre encima. |
+| 2026-07-22 | `flor-shader` | Pétalos limitados a 3–10; textura de pétalos **sin verde** (paleta propia + tope duro del canal G); **fondo de oleaje** procedural (cuarto shader, cuad de pantalla completa); y **guardar al cerrar los ojos** vía Face Landmarker (nueva capacidad `onParpadeo` en `manosMediaPipe.ts`). |
+| 2026-07-22 | `flor-shader` | Fix del guardado por parpadeo: `onParpadeo` corre dentro de `actualizar()` al inicio de `draw()` (canvas recién limpiado → PNG negro). Se difiere con una bandera y `saveCanvas` se llama al **final** de `draw()`, con la flor ya dibujada. |
+| 2026-07-22 | `flor-manos` | Arreglo de la conexión a la cámara: biblioteca nueva `camara.ts` (menú de dispositivos + apertura del stream), sustituye a `createCapture` + `.hide()`. La pieza gana selector de cámara y su `source` pasa a `milpa/lib/sketches/florManos.ts` para que el panel `CodeBlock` muestre su código (`sync-originals.mjs` aprende a copiar piezas del repo propio). |
