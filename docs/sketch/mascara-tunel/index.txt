@@ -1,0 +1,1028 @@
+3:I[4707,[],""]
+5:I[6423,[],""]
+4:["slug","mascara-tunel","d"]
+0:["YoqBrUQ9wPDnnJbxTInqe",[[["",{"children":["sketch",{"children":[["slug","mascara-tunel","d"],{"children":["__PAGE__?{\"slug\":\"mascara-tunel\"}",{}]}]}]},"$undefined","$undefined",true],["",{"children":["sketch",{"children":[["slug","mascara-tunel","d"],{"children":["__PAGE__",{},[["$L1","$L2",null],null],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children","$4","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/baadd18e5a8bbd5b.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"es","className":"__variable_bb2e19","children":["$","body",null,{"className":"min-h-screen font-mono text-crema antialiased","children":["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":"404"}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],"notFoundStyles":[]}]}]}]],null],null],["$L6",null]]]]
+6:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"charSet":"utf-8"}],["$","title","2",{"children":"Máscara en el Túnel — MILPA"}],["$","meta","3",{"name":"description","content":"Tu cara se vuelve una máscara de 854 triángulos que viaja por un túnel curvo. El túnel no es geometría: cada píxel del fondo lanza un rayo que avanza a tientas hasta chocar con la pared de un tubo cuyo eje serpentea, y por un ramal lateral corre una brasa naranja. La máscara se texturiza con un plasma acumulativo congelado —dieciocho vueltas de un bucle que rota y pliega el plano hasta armar filamentos de color— encuadrado de modo que la zona más brillante y detallada cae siempre sobre la nariz. Aparece a media profundidad del tubo, se acerca hasta rozar la cámara y vuelve a empezar, iluminando la pared a su paso. Cerrar el ojo izquierdo salta a otro fotograma del plasma (otra textura, otros colores) y mantenerlo cerrado la hace derivar despacio; cerrar el derecho da un empujón que trae la máscara hacia adelante y aviva el destello. Sin cámara el túnel vuela igual y la máscara se sustituye por un plano con la misma textura."}],["$","link","4",{"rel":"icon","href":"/icon.svg?e5bdd04178928d30","type":"image/svg+xml","sizes":"any"}]]
+1:null
+7:I[9999,["648","static/chunks/648-a963bf0325acd59f.js","248","static/chunks/248-f5ede8c8cb4d11aa.js","935","static/chunks/app/sketch/%5Bslug%5D/page-1b83b5b0bf6ccfbe.js"],"default"]
+8:T9181,import type p5 from "p5";
+import type { SketchFactory } from "../types";
+import { Knob } from "../bibliotecas/knob";
+import { Boton, PanelEstado } from "../bibliotecas/boton";
+import { RastreadorCara, uvLocal } from "../bibliotecas/caraMediaPipe";
+import { SelectorCamara } from "../bibliotecas/camara";
+
+/**
+ * **Máscara en el Túnel** — la cara del visitante, convertida en malla 3D y
+ * texturizada con un plasma, viajando por un túnel curvo raymarcheado.
+ *
+ * Son **dos shaders de Shadertoy** portados y cosidos en una sola escena:
+ *
+ * 1. **Plasma acumulativo** (`PLASMA_FRAG`) — la textura de la máscara. Dieciocho
+ *    vueltas de un bucle que en cada paso rota el plano, lo desplaza en función
+ *    de lo ya acumulado y suma `(cos(pesos + t) + 1) / |q|`. Lo brillante y
+ *    detallado queda en el **centro** del encuadre, porque el bucle centra en
+ *    `u = uv − centro` y al final resta `dot(u,u)` como viñeta. Autor y URL:
+ *    **no vinieron con el shader** (llegó al buzón sin acreditación); si
+ *    aparecen, van acá y en `algorithms.md`.
+ *
+ * 2. **Túnel raymarcheado** (`TUNEL_FRAG`) — el fondo. Un tubo cuyo eje sigue
+ *    `camino(z) = (2·sin(0.2z), cos(0.3z))`, un segundo tubo ramal por
+ *    `camino2(z)` y una textura fractal de senos que le pone grano a la pared.
+ *    120 pasos de esfera. Trae anotada la referencia
+ *    `https://www.shadertoy.com/view/mlXyDn`, pero por el texto que la rodea
+ *    **no es seguro que sea la URL del propio shader** en vez de una referencia
+ *    a otro: queda registrada como *referencia anotada en el original*, no como
+ *    fuente confirmada.
+ *
+ * Cómo se cosen, que es donde está el trabajo:
+ *
+ * - **La esfera `bl1` del túnel desaparece y su lugar lo ocupa la máscara.** El
+ *   resplandor que aportaba (`o += .8·exp(−bl1)`) no se borra: se recalcula
+ *   desde la posición real de la máscara, que viaja al shader como uniform. Por
+ *   eso la máscara ilumina el tubo desde adentro en vez de estar pegada encima.
+ *   `bl2` (la brasa que sigue `camino2`) se conserva: corre por el tubo ramal,
+ *   no compite con la máscara y aporta el acento naranja y la sensación de
+ *   profundidad. Tiene su propio interruptor por si molesta.
+ *
+ * - **La cámara de p5 replica la del shader**, no se improvisa: ojo en
+ *   `(camino(camZ), camZ)`, mira a `(camino(t), t)`, y la construcción del rayo
+ *   `D += mat2x3(rt, cross(D,rt))·(u − R/2)/R.y` es un pinhole de distancia
+ *   focal 1 sobre media altura, o sea **FOV vertical = 2·atan(0.5)** (~53°). El
+ *   vector `arriba` se pasa **negado** porque la proyección de p5 invierte la Y
+ *   (`−f·yScale` en `Camera.perspective`). Así la máscara cae exactamente donde
+ *   iba la esfera, y se mantiene dentro del tubo mientras el túnel serpentea.
+ *
+ * - **El plasma está congelado.** `iTime` deja de ser el reloj y pasa a ser una
+ *   *semilla*: en ese shader `t` se incrementa dentro del bucle, así que valores
+ *   distintos dan texturas distintas, no una animación. La textura se
+ *   re-renderiza solo cuando cambia la fase (o cuando la nariz se corre dentro
+ *   de la cara), nunca por frame. El túnel, en cambio, sigue en movimiento.
+ *
+ * - **Las UV de la malla son locales a la cara** (posición del landmark dentro
+ *   de la caja envolvente de todos los landmarks), no de pantalla: así la
+ *   textura queda clavada a la cara y no se desliza cuando el usuario se mueve.
+ *   El centro que recibe el plasma es la UV de la nariz en ese mismo espacio, y
+ *   por eso lo brillante siempre cae **sobre la nariz**.
+ *
+ * **Los ojos son el instrumento**, con detección por ojo separado (histéresis +
+ * refractario, misma disciplina que `detectarParpadeo`):
+ *   ojo izquierdo cerrado  → salta a otro fotograma del plasma (otra textura,
+ *                            otros colores); sostenido, la fase avanza despacio.
+ *   ojo derecho cerrado    → empujón: la máscara salta hacia la cámara y sube el
+ *                            destello que arroja sobre el tubo.
+ *
+ * **Sin cámara la pieza sigue viva**: el túnel vuela igual y la máscara se
+ * sustituye por un plano con la misma textura recorriendo el mismo loop de
+ * profundidad. Todas las perillas y botones siguen funcionando.
+ */
+
+const SLUG = "mascara-tunel";
+
+/**
+ * Todos los colores del archivo. Los del **plasma** se conservan del original
+ * —son el carácter de la pieza— y viajan al shader como el tinte base y los
+ * pesos de su paleta coseno; los del **túnel** se recolorean a la identidad de
+ * la galería (verdes profundos + brasa naranja). Ningún hex dentro del GLSL.
+ */
+const PALETA = {
+  fondo: "#050805", // matrix-black
+  /** Tinte base del plasma: el `vec4(1,2,3,0)` del original, /3. */
+  plasmaBase: "#55aaff",
+  /** Pared del tubo iluminada (era `vec4(.3)`), verde-gris frío. */
+  tuboPared: "#4a6b5c",
+  /** Fondo del tubo (era `vec4(1,4,8,0)/30.`), verde-azul casi negro. */
+  tuboLejos: "#062429",
+  /** Luz que la máscara arroja sobre el tubo (heredera del brillo de `bl1`). */
+  destello: "#7fffa8", // matrix-text
+  /** Brasa que corre por el tubo ramal (`bl2`): acento naranja, puntual. */
+  brasa: "#ff6a00", // neon-ember
+  hud: "#7fffa8", // matrix-text
+  hudLinea: "#143b22", // matrix-line
+  hudAcento: "#00ff41", // matrix-green
+} as const;
+
+const CONFIG = {
+  ancho: 900,
+  alto: 600,
+  /** Lado de la textura de plasma, en px. Cuadrada: se estira sobre la cara. */
+  texturaPlasma: 512,
+
+  // --- Plasma ---------------------------------------------------------------
+  /** Fase congelada por defecto (el `iTime` del original, como semilla). */
+  fasePlasma: 3.4,
+  /** Rango de la perilla de fase. */
+  faseMin: 0,
+  faseMax: 40,
+  /** Cuánto avanza la fase por segundo mientras el ojo izquierdo sigue cerrado. */
+  faseSostenida: 1.6,
+  /** Salto de fase en el flanco de cierre del ojo izquierdo. */
+  faseSalto: 2.7,
+  /** Zoom del encuadre del plasma (1 = el del original sobre un cuadrado). */
+  escalaPlasma: 1,
+  /** `o *= .15` del original. */
+  gananciaPlasma: 0.15,
+  /** `o -= dot(u,u)/30.` del original: la viñeta que oscurece los bordes. */
+  vinetaPlasma: 1 / 30,
+  /** Pesos de la paleta coseno `cos(vec4(1,8,4,0) + t)`: el color del plasma. */
+  pesosPlasma: [1, 8, 4, 0] as const,
+  /** Cuánto tiene que moverse la nariz (en UV) para re-renderizar la textura. */
+  umbralCentro: 0.008,
+
+  // --- Túnel ----------------------------------------------------------------
+  /** `freqA, freqB, ampA, ampB` de `camino()` — compartidos con el shader. */
+  camino: [0.2, 0.3, 2, 1] as const,
+  /** Velocidad del vuelo por el tubo (1 = el `iTime*.8` del original). */
+  velTunel: 1,
+  /** Máximo dt por frame, en s: evita saltos al volver de una pestaña dormida. */
+  dtMax: 0.1,
+
+  // --- Loop de profundidad de la máscara -------------------------------------
+  /** Z de salida, relativo a la cámara: media profundidad del túnel visible. */
+  zLejos: 9,
+  /** Z de llegada: justo delante de la cámara. */
+  zCerca: 1.2,
+  /** Vueltas del loop por segundo. */
+  velAcercar: 0.16,
+  /** Cuánto adelanta el loop el empujón del ojo derecho (fracción de vuelta). */
+  empujon: 0.22,
+
+  // --- Máscara ---------------------------------------------------------------
+  /** Altura de la máscara en unidades del túnel (el tubo tiene radio ~1). */
+  tamano: 0.8,
+  /** Multiplicador del relieve (la `z` de los landmarks). */
+  relieve: 1.4,
+  /** Brillo del destello que la máscara arroja sobre el tubo. */
+  destello: 0.8,
+  /** Extra de destello al empujar, y cuánto sobrevive por frame. */
+  destelloExtra: 1.1,
+  decaimientoDestello: 0.94,
+  /** Radio del resplandor de la máscara (el `- .1` de la esfera original). */
+  radioDestello: 0.35,
+  /** Profundidad a la que la máscara se funde del todo con el color del tubo. */
+  niebla: 11,
+
+  // --- Ojos ------------------------------------------------------------------
+  /** Umbrales con histéresis del blendshape de parpadeo (0–1). */
+  ojoCierra: 0.55,
+  ojoAbre: 0.32,
+  /** Refractario entre flancos del mismo ojo, en ms. */
+  refractario: 420,
+
+  preview: 190,
+};
+
+/**
+ * Vertex shader del cuad de pantalla completa: **ignora cámara y proyección** y
+ * manda `aTexCoord` directo a clip space. Es el mismo truco de `mareaManos.ts`
+ * y del fondo de `florShader.ts`, y es lo que hace que el túnel se dibuje igual
+ * sin importar qué cámara tenga p5 puesta en ese momento. Con `uv.y = 0` abajo,
+ * las coordenadas coinciden con el `fragCoord` de Shadertoy (origen
+ * abajo-izquierda) sin ninguna inversión extra.
+ */
+const CUAD_VERT = `
+precision highp float;
+attribute vec3 aPosition;
+attribute vec2 aTexCoord;
+varying vec2 vUv;
+void main() {
+  vUv = aTexCoord;
+  gl_Position = vec4(aTexCoord * 2.0 - 1.0, 0.0, 1.0);
+}
+`;
+
+/**
+ * **Shader 1: plasma acumulativo.** Portado tal cual salvo tres cambios:
+ * `iTime` es una fase congelada que llega por uniform (semilla, no reloj), el
+ * encuadre se centra en `uCentro` (la nariz) en vez de en el medio de la
+ * imagen, y el color sale de uniforms (tinte base + pesos de la paleta coseno)
+ * en lugar de literales.
+ *
+ * El `while(t++, i++ < 18.)` del original ejecuta 18 vueltas con `t` ya
+ * incrementado y `i` de 1 a 18; el `for` de acá reproduce exactamente eso
+ * (WebGL1 exige tope constante de iteraciones).
+ */
+const PLASMA_FRAG = `
+precision highp float;
+varying vec2 vUv;
+
+uniform vec2 uCentro;    // UV de la nariz en espacio local de la cara
+uniform float uEscala;
+uniform float uFase;     // el iTime del original, congelado
+uniform vec4 uPesos;     // cos(uPesos + t): el color del plasma
+uniform vec3 uTinte;     // acumulador inicial (era vec4(1,2,3,0))
+uniform float uGanancia;
+uniform float uVineta;
+
+// El original escribe esto como mat2(cos(a + vec4(0,11,33,0))); se expande a
+// cuatro escalares porque el constructor mat2(vec4) es terreno resbaladizo en
+// GLSL ES 1.00 (WebGL1) según el compilador, y el resultado es idéntico.
+#define giro(a) mat2(cos(a), cos((a) + 11.0), cos((a) + 33.0), cos(a))
+
+void main() {
+  vec2 v, q;
+  vec2 u = (vUv - uCentro) * uEscala;
+  vec4 o = vec4(uTinte, 0.0);
+  float i = 0.0;
+  float t = uFase;
+
+  for (int k = 0; k < 18; k++) {
+    t += 1.0;
+    i += 1.0;
+    v = cos(t * vec2(3.0, 2.0) + vec2(0.0, 11.0)) - 6.0 * u;
+    u *= giro(i - 0.1 * t);
+    u += cos(4.0 / exp(dot(o, o) / 100.0) + t) / 5.0;
+    q = sin(u / (2.0 - dot(u, u)) - 9.0 * u.yx + t);
+    q *= 1.0 + i * dot(v, v);
+    o += (cos(uPesos + t) + 1.0) / length(q);
+  }
+
+  o *= uGanancia;
+  o -= dot(u, u) * uVineta;   // viñeta: lo brillante queda en uCentro
+  gl_FragColor = vec4(max(o.rgb, vec3(0.0)), 1.0);
+}
+`;
+
+/**
+ * **Shader 2: túnel raymarcheado.** Cambios respecto del original:
+ *
+ * - `bl1` (la esfera que rebotaba con `tanh(cos(.9t)·4)`) **se elimina del
+ *   SDF**: su lugar lo ocupa la máscara. Su resplandor se recalcula desde
+ *   `uMascara`, la posición real de la malla. De paso desaparece la única
+ *   llamada a `tanh`, que no existe en GLSL ES 1.00 (WebGL1).
+ * - `mat2x3` tampoco existe en ES 1.00: la construcción del rayo se escribe a
+ *   mano como `D + rt·sx + cross(D,rt)·sy`, que es lo mismo.
+ * - Los `while` de bucle abierto pasan a `for` con tope constante y `break`
+ *   (requisito de WebGL1).
+ * - `p/p` de `textura()` pasa a `vec3(1.0)`: es lo mismo salvo por los NaN que
+ *   el original produce cuando alguna componente vale exactamente 0.
+ * - Los parámetros de `camino()` llegan por uniform desde `CONFIG`, para que la
+ *   réplica en TypeScript (que coloca la máscara y la cámara) no se pueda
+ *   desincronizar del shader.
+ */
+const TUNEL_FRAG = `
+precision highp float;
+varying vec2 vUv;
+
+uniform vec2 uResolucion;
+uniform float uTiempo;        // el 't' del original (iTime * .8), acumulado en TS
+uniform vec4 uCamino;         // freqA, freqB, ampA, ampB
+uniform vec3 uPared;
+uniform vec3 uLejos;
+uniform vec3 uDestello;
+uniform vec3 uBrasa;
+uniform vec3 uMascara;        // posición de la máscara en el mundo del túnel
+uniform float uRadioMascara;
+uniform float uBrilloMascara;
+uniform float uBrasaActiva;
+
+vec4 cor;
+float bl2;
+
+vec2 camino(float z) {
+  return vec2(uCamino.z * sin(z * uCamino.x), uCamino.w * cos(z * uCamino.y));
+}
+
+vec2 camino2(float z) {
+  return vec2(uCamino.w * sin(z * uCamino.y * 0.8), uCamino.z * cos(z * uCamino.x * 0.2));
+}
+
+/** Grano de la pared: octavas de senos que se duplican en frecuencia. */
+float textura(vec3 pos) {
+  float d = 0.0;
+  float a = 0.5;
+  for (int k = 0; k < 7; k++) {
+    vec3 f = pos * a * 8.0;
+    d -= abs(dot(sin(f), vec3(1.0))) / a;
+    a += a;
+  }
+  return d;
+}
+
+/**
+ * SDF de la escena: el interior del tubo principal unido al del ramal, más la
+ * brasa. 'cor' sale como efecto lateral (el color de la pared en el punto).
+ */
+float mapa(vec3 pos) {
+  float d1 = length(pos.xy - camino(pos.z));
+  float d2 = length(pos.xy - camino2(pos.z));
+  float e = 0.04 * textura(pos);
+
+  float b2 = sin(2.0 * uTiempo) * 3.0 + uTiempo + 5.0;
+  bl2 = length(pos - vec3(camino2(b2), b2)) - 0.1;
+
+  cor = mix(vec4(uPared, 1.0), vec4(uLejos, 1.0),
+            smoothstep(-0.1, 0.1, d1 * 2.0 - 1.9) - 0.3);
+
+  float tubo = 1.05 - min(d2, min(d1, 1.0)) + e;
+  return uBrasaActiva > 0.5 ? min(tubo, bl2) : tubo;
+}
+
+void main() {
+  // (fragCoord − R/2) / R.y, con uv.y = 0 abajo como en Shadertoy.
+  vec2 sc = (vUv - 0.5) * vec2(uResolucion.x / uResolucion.y, 1.0);
+
+  float camZ = uTiempo - 0.1;
+  vec3 pos = vec3(camino(camZ), camZ);
+  vec3 mira = vec3(camino(uTiempo), uTiempo);
+
+  // Pinhole de distancia focal 1 sobre media altura → FOV vertical 2·atan(0.5).
+  vec3 D = normalize(mira - pos);
+  vec3 rt = vec3(D.z, 0.0, -D.x);
+  D += rt * sc.x + cross(D, rt) * sc.y;
+
+  float s = 1.0;
+  float i = 0.0;
+  for (int k = 0; k < 120; k++) {
+    if (s <= 0.001) break;
+    i += 1.0;
+    s = mapa(pos) * 0.5;
+    pos += s * D;
+  }
+
+  vec4 o = cor;
+  o += 3.5 / i;   // menos pasos = superficie cercana = más brillo
+
+  // El resplandor que aportaba la esfera bl1 del original, ahora emitido por la
+  // máscara desde su posición real: es lo que la hace pertenecer a la escena.
+  float dm = length(pos - uMascara) - uRadioMascara;
+  o.rgb += uDestello * uBrilloMascara * exp(-dm);
+
+  // La brasa del tubo ramal (era 'o.r += ...', acento rojo del original).
+  o.rgb += uBrasa * uBrasaActiva * 0.8 * exp(-bl2);
+
+  gl_FragColor = vec4(max(o.rgb, vec3(0.0)), 1.0);
+}
+`;
+
+/**
+ * Shader de la máscara: estampa la textura de plasma sobre la malla y la funde
+ * con el color del tubo según la distancia a la cámara, para que al fondo se
+ * lea apagada (como se veía la esfera original) y encendida al acercarse.
+ */
+const MASCARA_VERT = `
+precision highp float;
+attribute vec3 aPosition;
+attribute vec2 aTexCoord;
+uniform mat4 uProjectionMatrix;
+uniform mat4 uModelViewMatrix;
+varying vec2 vUv;
+varying float vProf;
+void main() {
+  vUv = aTexCoord;
+  vec4 vista = uModelViewMatrix * vec4(aPosition, 1.0);
+  vProf = -vista.z;             // distancia a la cámara, en unidades del túnel
+  gl_Position = uProjectionMatrix * vista;
+}
+`;
+
+const MASCARA_FRAG = `
+precision highp float;
+varying vec2 vUv;
+varying float vProf;
+uniform sampler2D uTextura;
+uniform vec3 uLejos;
+uniform float uNiebla;
+uniform float uGanancia;
+void main() {
+  vec3 col = texture2D(uTextura, vUv).rgb * uGanancia;
+  float f = clamp(vProf / uNiebla, 0.0, 1.0);
+  col = mix(col, uLejos, f * 0.8);
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+/**
+ * Flanco de cierre de **un** ojo: dos umbrales (histéresis) más refractario. Con
+ * un solo umbral, un ojo entrecerrado dispararía un evento por frame; con dos
+ * hay que cruzar de lado a lado para volver a disparar. Misma disciplina que
+ * `detectarParpadeo` de `manosMediaPipe.ts` y que el detector de puño de
+ * `mareaManos.ts`, pero por ojo.
+ */
+class DetectorOjo {
+  /** El ojo está cerrado ahora mismo (para la fase sostenida). */
+  cerrado = false;
+  private ultimo = -Infinity;
+
+  /** `true` solo en el frame en que el ojo se cierra. */
+  actualizar(cierre: number, ahora: number): boolean {
+    if (!this.cerrado && cierre > CONFIG.ojoCierra) {
+      this.cerrado = true;
+      if (ahora - this.ultimo > CONFIG.refractario) {
+        this.ultimo = ahora;
+        return true;
+      }
+    } else if (this.cerrado && cierre < CONFIG.ojoAbre) {
+      this.cerrado = false;
+    }
+    return false;
+  }
+
+  reiniciar(): void {
+    this.cerrado = false;
+  }
+}
+
+export const mascaraTunel: SketchFactory = (p: p5) => {
+  const rastreador = new RastreadorCara(p);
+  const ojoIzq = new DetectorOjo();
+  const ojoDer = new DetectorOjo();
+
+  // --- Estado en clausura ---------------------------------------------------
+  let shaderTunel: p5.Shader;
+  let shaderPlasma: p5.Shader;
+  let shaderMascara: p5.Shader;
+  let plasma: p5.Framebuffer;
+
+  /** Reloj del túnel (el `iTime*.8` del original), acumulado para que la
+   *  perilla de velocidad no produzca saltos al cambiar. */
+  let tiempoTunel = 0;
+  /** Fase del loop de profundidad, 0 = lejos, 1 = pegada a la cámara. */
+  let faseLoop = 0;
+
+  // Parámetros de las perillas.
+  let fasePlasma = CONFIG.fasePlasma;
+  let velTunel = CONFIG.velTunel;
+  let velAcercar = CONFIG.velAcercar;
+  let zLejos = CONFIG.zLejos;
+  let zCerca = CONFIG.zCerca;
+  let destello = CONFIG.destello;
+  let tamano = CONFIG.tamano;
+
+  /** Golpe de destello del empujón: decae solo, como el impulso de `mareaManos`. */
+  let destelloGolpe = 0;
+
+  /** Última fase/centro con los que se horneó la textura (para no repetirla). */
+  let faseHorneada = NaN;
+  const centroHorneado: [number, number] = [0.5, 0.5];
+  /** Centro objetivo del plasma: la UV de la nariz, suavizada. */
+  const centroPlasma: [number, number] = [0.5, 0.5];
+
+  /** Posición de la máscara en el mundo del túnel (la comparten p5 y el shader). */
+  const posMascara: [number, number, number] = [0, 0, 0];
+
+  /** Vértices de la malla: 5 flotantes por landmark (x, y, z, u, v). */
+  let vertices = new Float32Array(0);
+
+  let usarCamara = false;
+  let mostrarHud = true;
+  let brasaActiva = true;
+  let selectorCamara: SelectorCamara;
+  let panelEstado: PanelEstado;
+  /** La perilla de fase, para reflejar en ella los saltos que dan los ojos. */
+  let perillaFase: Knob | undefined;
+  /** Guarda de reentrada: `Knob.value()` dispara su propio `onChange`. */
+  let sincronizandoFase = false;
+
+  p.setup = () => {
+    p.createCanvas(CONFIG.ancho, CONFIG.alto, p.WEBGL);
+    // El raymarch cuesta por píxel: en pantallas retina, dejar que p5 duplique
+    // la densidad cuadruplica el trabajo sin que se note la diferencia.
+    p.pixelDensity(1);
+    p.noStroke();
+    p.frameRate(60);
+
+    shaderTunel = p.createShader(CUAD_VERT, TUNEL_FRAG);
+    shaderPlasma = p.createShader(CUAD_VERT, PLASMA_FRAG);
+    shaderMascara = p.createShader(MASCARA_VERT, MASCARA_FRAG);
+
+    const api = p as unknown as {
+      createFramebuffer(opciones: object): p5.Framebuffer;
+    };
+    plasma = api.createFramebuffer({
+      width: CONFIG.texturaPlasma,
+      height: CONFIG.texturaPlasma,
+      density: 1,
+      channels: p.RGBA,
+      depth: false,
+      antialias: false,
+    });
+
+    crearControles();
+  };
+
+  p.draw = () => {
+    // Limpia color **y profundidad**: sin esto la malla del frame anterior
+    // dejaría su z y la nueva se descartaría a medias.
+    p.background(PALETA.fondo);
+
+    const dt = Math.min(p.deltaTime / 1000, CONFIG.dtMax);
+    if (usarCamara && rastreador.activo) rastreador.actualizar();
+    leerOjos(dt);
+    avanzarTiempo(dt);
+    situarMascara();
+    hornearPlasma();
+
+    dibujarTunel();
+    dibujarMascara();
+
+    // Vuelta a la cámara por defecto: el preview se estampa con `p.image()`, que
+    // en WEBGL usa la cámara vigente, y la del túnel lo mandaría a otro sitio.
+    // Y hay que limpiar profundidad antes: la máscara escribió z con la
+    // proyección del túnel, que no tiene nada que ver con esta, y el preview
+    // quedaría descartado a capricho del z-test.
+    p.perspective();
+    p.camera();
+    limpiarProfundidad();
+    if (mostrarHud) dibujarPreview();
+    panelEstado.actualizar(mostrarHud ? textoEstado() : "");
+
+    destelloGolpe *= CONFIG.decaimientoDestello;
+    if (destelloGolpe < 0.005) destelloGolpe = 0;
+  };
+
+  // --- El camino del túnel, replicado en TS ---------------------------------
+  // Misma fórmula que `camino()` en el shader, alimentada por los mismos cuatro
+  // números de `CONFIG.camino` que viajan como uniform: si la máscara no siguiera
+  // esta curva, se saldría del tubo en cuanto el túnel gira.
+
+  function camino(z: number): [number, number] {
+    const [freqA, freqB, ampA, ampB] = CONFIG.camino;
+    return [ampA * Math.sin(z * freqA), ampB * Math.cos(z * freqB)];
+  }
+
+  function avanzarTiempo(dt: number) {
+    tiempoTunel += dt * velTunel * 0.8; // el .8 del `#define t iTime * .8`
+    faseLoop += dt * velAcercar;
+    if (faseLoop >= 1) faseLoop -= Math.floor(faseLoop);
+  }
+
+  /**
+   * Coloca la máscara: arranca a media profundidad del túnel y se acerca a la
+   * cámara, en loop. El recorrido es un **offset relativo a la cámara** (que va
+   * en `z = t − .1`), así la máscara viaja con el vuelo en vez de quedarse atrás.
+   */
+  function situarMascara() {
+    const camZ = tiempoTunel - 0.1;
+    const lejos = Math.max(zLejos, zCerca + 0.2);
+    const cerca = Math.min(zCerca, lejos - 0.2);
+    const z = camZ + lejos + (cerca - lejos) * faseLoop;
+    const [x, y] = camino(z);
+    posMascara[0] = x;
+    posMascara[1] = y;
+    posMascara[2] = z;
+  }
+
+  // --- Textura de la máscara (shader 1) -------------------------------------
+
+  /**
+   * Re-renderiza el plasma **solo si hace falta**: la textura está congelada, así
+   * que solo cambia cuando el usuario mueve la fase (perilla u ojo izquierdo) o
+   * cuando la nariz se corrió lo suficiente dentro de la caja de la cara.
+   */
+  function hornearPlasma() {
+    const movio =
+      Math.abs(centroPlasma[0] - centroHorneado[0]) > CONFIG.umbralCentro ||
+      Math.abs(centroPlasma[1] - centroHorneado[1]) > CONFIG.umbralCentro;
+    if (fasePlasma === faseHorneada && !movio) return;
+
+    faseHorneada = fasePlasma;
+    centroHorneado[0] = centroPlasma[0];
+    centroHorneado[1] = centroPlasma[1];
+
+    p.push();
+    plasma.begin();
+    // REPLACE: la textura se escribe entera, no se mezcla con la anterior.
+    p.blendMode(p.REPLACE);
+    p.shader(shaderPlasma);
+    shaderPlasma.setUniform("uCentro", [...centroPlasma]);
+    shaderPlasma.setUniform("uEscala", CONFIG.escalaPlasma);
+    shaderPlasma.setUniform("uFase", fasePlasma);
+    shaderPlasma.setUniform("uPesos", [...CONFIG.pesosPlasma]);
+    // El tinte base del original es vec4(1,2,3,0): se guarda como hex (÷3) y se
+    // devuelve a su magnitud acá, para que no quede ni un color suelto en GLSL.
+    shaderPlasma.setUniform("uTinte", rgb(PALETA.plasmaBase).map((c) => c * 3));
+    shaderPlasma.setUniform("uGanancia", CONFIG.gananciaPlasma);
+    shaderPlasma.setUniform("uVineta", CONFIG.vinetaPlasma);
+    // El tamaño del plano da igual: el vertex shader manda la UV a clip space.
+    p.plane(CONFIG.texturaPlasma, CONFIG.texturaPlasma);
+    plasma.end();
+    p.blendMode(p.BLEND);
+    p.pop();
+    p.resetShader();
+  }
+
+  // --- Capa 1: el túnel (shader 2) ------------------------------------------
+
+  /**
+   * Cuad de pantalla completa con el z-test apagado: es el telón del fondo. Con
+   * el test apagado tampoco escribe profundidad, así que la malla que va después
+   * no queda descartada por él.
+   */
+  function dibujarTunel() {
+    const gl = p.drawingContext as WebGLRenderingContext;
+    gl.disable(gl.DEPTH_TEST);
+    p.push();
+    p.shader(shaderTunel);
+    shaderTunel.setUniform("uResolucion", [p.width, p.height]);
+    shaderTunel.setUniform("uTiempo", tiempoTunel);
+    shaderTunel.setUniform("uCamino", [...CONFIG.camino]);
+    shaderTunel.setUniform("uPared", rgb(PALETA.tuboPared));
+    shaderTunel.setUniform("uLejos", rgb(PALETA.tuboLejos));
+    shaderTunel.setUniform("uDestello", rgb(PALETA.destello));
+    shaderTunel.setUniform("uBrasa", rgb(PALETA.brasa));
+    shaderTunel.setUniform("uMascara", [...posMascara]);
+    shaderTunel.setUniform("uRadioMascara", CONFIG.radioDestello * tamano);
+    shaderTunel.setUniform("uBrilloMascara", destello + destelloGolpe);
+    shaderTunel.setUniform("uBrasaActiva", brasaActiva ? 1 : 0);
+    p.plane(p.width, p.height);
+    p.pop();
+    p.resetShader();
+    gl.enable(gl.DEPTH_TEST);
+    limpiarProfundidad();
+  }
+
+  /** Vacía el buffer de profundidad para que la siguiente capa vaya encima. */
+  function limpiarProfundidad() {
+    const gl = p.drawingContext as WebGLRenderingContext;
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+  }
+
+  // --- Capa 2: la máscara ----------------------------------------------------
+
+  /**
+   * Réplica exacta de la cámara del shader: ojo en `(camino(camZ), camZ)`, mira
+   * a `(camino(t), t)`, base `rt = (D.z, 0, −D.x)` y `arriba = cross(D, rt)`.
+   *
+   * El `arriba` se pasa **negado**: `Camera.perspective` de p5 arma la matriz de
+   * proyección con `−f·yScale`, o sea invierte la Y de pantalla (por eso en
+   * WEBGL la `y` positiva va hacia abajo). Sin ese signo la máscara aparecería
+   * boca abajo respecto del túnel.
+   */
+  function ponerCamaraDelTunel() {
+    const camZ = tiempoTunel - 0.1;
+    const [ox, oy] = camino(camZ);
+    const [mx, my] = camino(tiempoTunel);
+    const d = normalizar([mx - ox, my - oy, tiempoTunel - camZ]);
+    const rt = normalizar([d[2], 0, -d[0]]);
+    const arriba = normalizar(cruz(d, rt));
+
+    // FOV vertical = 2·atan(0.5): la construcción del rayo del shader es un
+    // pinhole de distancia focal 1 medido sobre MEDIA altura de pantalla.
+    // near/far ajustados al recorrido real de la máscara (0.4–16 unidades): un
+    // rango exagerado solo desperdicia precisión del z-buffer dentro de la malla.
+    p.perspective(2 * Math.atan(0.5), p.width / p.height, 0.05, 100);
+    p.camera(ox, oy, camZ, mx, my, tiempoTunel, -arriba[0], -arriba[1], -arriba[2]);
+  }
+
+  function dibujarMascara() {
+    ponerCamaraDelTunel();
+    p.push();
+    p.shader(shaderMascara);
+    shaderMascara.setUniform("uTextura", plasma as unknown as p5.Graphics);
+    shaderMascara.setUniform("uLejos", rgb(PALETA.tuboLejos));
+    shaderMascara.setUniform("uNiebla", CONFIG.niebla);
+    shaderMascara.setUniform("uGanancia", 1 + destelloGolpe * 0.5);
+    p.translate(posMascara[0], posMascara[1], posMascara[2]);
+    if (rastreador.hayCara) dibujarMalla();
+    else dibujarPlano();
+    p.pop();
+    p.resetShader();
+  }
+
+  /**
+   * La cara como malla de triángulos. Los vértices se calculan en **espacio
+   * local de la cara**: centro y escala salen de la caja envolvente de los
+   * landmarks, así la máscara conserva su tamaño en el túnel aunque el usuario
+   * se acerque o se aleje de la cámara. La `y` se invierte (la imagen tiene la
+   * `y` hacia abajo y el mundo del túnel hacia arriba) y la `z` de los landmarks
+   * —negativa hacia la cámara— da el relieve.
+   */
+  function dibujarMalla() {
+    const cara = rastreador.estado.cara!;
+    const { caja } = cara;
+    const n = cara.puntos.length;
+    if (vertices.length < n * 5) vertices = new Float32Array(n * 5);
+
+    const esc = tamano / caja.alto;
+    for (let i = 0; i < n; i++) {
+      const q = cara.puntos[i];
+      const [u, v] = uvLocal(q, caja);
+      const j = i * 5;
+      vertices[j] = (q.x - caja.centroX) * esc;
+      vertices[j + 1] = -(q.y - caja.centroY) * esc;
+      vertices[j + 2] = q.z * esc * CONFIG.relieve;
+      vertices[j + 3] = u;
+      vertices[j + 4] = v;
+    }
+
+    // El centro del plasma es la nariz en ese mismo espacio local: por eso lo
+    // brillante de la textura queda clavado sobre la nariz pase lo que pase.
+    const [nu, nv] = uvLocal(cara.nariz, caja);
+    centroPlasma[0] = nu;
+    centroPlasma[1] = nv;
+
+    // Los 854 triángulos vienen derivados del grafo de teselación (ver
+    // `caraMediaPipe.ts`). Se descarta el triángulo entero —no un vértice
+    // suelto— si algún índice cayera fuera del modelo cargado, para no
+    // desalinear la tira.
+    const tris = rastreador.triangulos;
+    p.beginShape(p.TRIANGLES);
+    for (let k = 0; k + 2 < tris.length; k += 3) {
+      if (tris[k] >= n || tris[k + 1] >= n || tris[k + 2] >= n) continue;
+      for (let e = 0; e < 3; e++) {
+        const j = tris[k + e] * 5;
+        p.vertex(
+          vertices[j],
+          vertices[j + 1],
+          vertices[j + 2],
+          vertices[j + 3],
+          vertices[j + 4],
+        );
+      }
+    }
+    p.endShape();
+  }
+
+  /** Sin cámara: un plano con la misma textura, en el mismo loop de profundidad. */
+  function dibujarPlano() {
+    centroPlasma[0] = 0.5;
+    centroPlasma[1] = 0.5;
+    const r = tamano / 2;
+    p.beginShape(p.TRIANGLES);
+    p.vertex(-r, -r, 0, 0, 0);
+    p.vertex(r, -r, 0, 1, 0);
+    p.vertex(r, r, 0, 1, 1);
+    p.vertex(-r, -r, 0, 0, 0);
+    p.vertex(r, r, 0, 1, 1);
+    p.vertex(-r, r, 0, 0, 1);
+    p.endShape();
+  }
+
+  // --- Interacción por ojos --------------------------------------------------
+
+  /**
+   * Ojo izquierdo → otra textura; ojo derecho → empujón hacia la cámara.
+   * Nomenclatura: `cierreIzq` viene de `eyeBlinkLeft`, que es el ojo **izquierdo
+   * del sujeto**; como el preview está espejado, ese ojo aparece a la derecha de
+   * la imagen. Para el usuario es "mi ojo izquierdo", que es lo que dice el HUD.
+   */
+  function leerOjos(dt: number) {
+    const cara = usarCamara && rastreador.activo ? rastreador.estado.cara : null;
+    if (!cara) {
+      ojoIzq.reiniciar();
+      ojoDer.reiniciar();
+      return;
+    }
+    const ahora = p.millis();
+    if (ojoIzq.actualizar(cara.cierreIzq, ahora)) saltarTextura();
+    if (ojoDer.actualizar(cara.cierreDer, ahora)) empujar();
+    // Sostener el ojo izquierdo cerrado hace derivar la fase despacio, para
+    // buscar un fotograma del plasma en vez de saltar a ciegas.
+    if (ojoIzq.cerrado) moverFase(dt * CONFIG.faseSostenida);
+  }
+
+  function saltarTextura() {
+    moverFase(CONFIG.faseSalto);
+  }
+
+  /**
+   * Corre la fase congelada del plasma y refleja el valor en la perilla. La
+   * guarda de reentrada es necesaria: `Knob.value()` **cuantiza al paso y
+   * dispara su `onChange`**, así que sin ella la deriva lenta del ojo sostenido
+   * (más chica que un paso) sería anulada por el propio knob y la fase no
+   * avanzaría nunca.
+   */
+  function moverFase(delta: number) {
+    const rango = CONFIG.faseMax - CONFIG.faseMin;
+    fasePlasma = CONFIG.faseMin + ((fasePlasma - CONFIG.faseMin + delta) % rango);
+    sincronizandoFase = true;
+    perillaFase?.value(fasePlasma);
+    sincronizandoFase = false;
+  }
+
+  /** Empujón: la máscara salta hacia la cámara y sube el destello que arroja. */
+  function empujar() {
+    faseLoop = Math.min(faseLoop + CONFIG.empujon, 0.999);
+    destelloGolpe = CONFIG.destelloExtra;
+  }
+
+  // --- Controles táctiles ----------------------------------------------------
+
+  function crearControles() {
+    perillaFase = new Knob(p, {
+      etiqueta: "Plasma",
+      min: CONFIG.faseMin,
+      max: CONFIG.faseMax,
+      valor: fasePlasma,
+      paso: 0.01,
+      onChange: (v) => {
+        if (!sincronizandoFase) fasePlasma = v;
+      },
+    }).position(12, 10);
+
+    new Knob(p, {
+      etiqueta: "Vuelo",
+      min: 0,
+      max: 3,
+      valor: velTunel,
+      paso: 0.02,
+      onChange: (v) => {
+        velTunel = v;
+      },
+    }).position(76, 10);
+
+    new Knob(p, {
+      etiqueta: "Acercar",
+      min: 0,
+      max: 1,
+      valor: velAcercar,
+      paso: 0.01,
+      onChange: (v) => {
+        velAcercar = v;
+      },
+    }).position(140, 10);
+
+    new Knob(p, {
+      etiqueta: "Lejos",
+      min: 2,
+      max: 16,
+      valor: zLejos,
+      paso: 0.1,
+      onChange: (v) => {
+        zLejos = v;
+      },
+    }).position(204, 10);
+
+    new Knob(p, {
+      etiqueta: "Cerca",
+      min: 0.4,
+      max: 6,
+      valor: zCerca,
+      paso: 0.1,
+      onChange: (v) => {
+        zCerca = v;
+      },
+    }).position(268, 10);
+
+    new Knob(p, {
+      etiqueta: "Destello",
+      min: 0,
+      max: 2.5,
+      valor: destello,
+      paso: 0.05,
+      onChange: (v) => {
+        destello = v;
+      },
+    }).position(332, 10);
+
+    new Knob(p, {
+      etiqueta: "Tamaño",
+      min: 0.3,
+      max: 1.8,
+      valor: tamano,
+      paso: 0.02,
+      onChange: (v) => {
+        tamano = v;
+      },
+    }).position(396, 10);
+
+    // Menú de cámaras: los `label` de `enumerateDevices()` llegan vacíos hasta
+    // que hay permiso, por eso el selector trae su propio botón "Buscar".
+    selectorCamara = new SelectorCamara(p, {
+      ancho: 200,
+      onCambio: (deviceId) => {
+        // Cambio en caliente: se reabre el stream sin recargar el modelo.
+        if (usarCamara) void rastreador.iniciar(deviceId);
+      },
+    });
+    selectorCamara.position(672, 10);
+
+    new Boton(p, {
+      etiqueta: "Cámara",
+      alternar: true,
+      acento: "naranja",
+      onPress: (activo) => {
+        usarCamara = activo;
+        if (activo) void rastreador.iniciar(selectorCamara.valor());
+        else rastreador.detener();
+      },
+    }).position(12, 540);
+
+    // Equivalentes táctiles de los dos ojos, para quien no tenga cámara.
+    new Boton(p, {
+      etiqueta: "Otra textura",
+      onPress: () => saltarTextura(),
+    }).position(130, 540);
+
+    new Boton(p, {
+      etiqueta: "Empujón",
+      onPress: () => empujar(),
+    }).position(266, 540);
+
+    new Boton(p, {
+      etiqueta: "Brasa",
+      alternar: true,
+      activo: true,
+      onPress: (activo) => {
+        brasaActiva = activo;
+      },
+    }).position(378, 540);
+
+    new Boton(p, {
+      etiqueta: "HUD",
+      alternar: true,
+      activo: true,
+      onPress: (activo) => {
+        mostrarHud = activo;
+      },
+    }).position(486, 540);
+
+    new Boton(p, {
+      etiqueta: "Guardar",
+      onPress: () => p.saveCanvas(SLUG, "png"),
+    }).position(574, 540);
+
+    // El estado va en un panel DOM: en WEBGL, `text()` exige una fuente cargada
+    // con `loadFont`.
+    panelEstado = new PanelEstado(p);
+    panelEstado.position(12, 508);
+  }
+
+  // --- HUD -------------------------------------------------------------------
+
+  /** Preview de la cámara con la cara dibujada encima, abajo a la derecha. */
+  function dibujarPreview() {
+    if (!usarCamara) return;
+    const w = CONFIG.preview;
+    // WEBGL centra el origen: la esquina inferior derecha se calcula a mano.
+    const x = p.width / 2 - w - 16;
+    const y = p.height / 2 - w * 0.75 - 78;
+    p.push();
+    p.resetShader(); // el shader de la máscara no debe teñir el preview
+    rastreador.dibujarPreview(x, y, w, {
+      linea: PALETA.hudAcento,
+      punto: PALETA.hud,
+      marco: PALETA.hudLinea,
+    });
+    p.pop();
+  }
+
+  function textoEstado(): string {
+    const aviso = rastreador.avisoMalla ? `  ⚠ ${rastreador.avisoMalla}` : "";
+    const comun = `plasma: ${fasePlasma.toFixed(2)}  z: ${(
+      posMascara[2] -
+      (tiempoTunel - 0.1)
+    ).toFixed(2)}`;
+    if (!usarCamara) {
+      return `cámara: apagada — la máscara es un plano; usá las perillas · ${comun}`;
+    }
+    switch (rastreador.fase) {
+      case "cargando":
+        return `cámara: cargando modelo de cara…  ·  ${comun}`;
+      case "sin-permiso":
+        return `cámara: permiso denegado — seguí con las perillas · ${comun}`;
+      case "error":
+        return `cámara: error — ${rastreador.mensaje} · ${comun}`;
+      case "activo": {
+        const cara = rastreador.estado.cara;
+        if (!cara) {
+          return `sin detección — poné la cara frente a la cámara · ${comun}${aviso}`;
+        }
+        const izq = ojoIzq.cerrado ? "cerrado" : cara.cierreIzq.toFixed(2);
+        const der = ojoDer.cerrado ? "cerrado" : cara.cierreDer.toFixed(2);
+        return `cara: ${rastreador.triangulos.length / 3} triángulos  ojo izq: ${izq}  ojo der: ${der}  ${comun}${aviso}`;
+      }
+      default:
+        return `cámara: apagada · ${comun}`;
+    }
+  }
+
+  // --- Utilidades ------------------------------------------------------------
+
+  /** Hex de `PALETA` → `[r, g, b]` en 0–1, que es lo que espera el shader. */
+  function rgb(hex: string): number[] {
+    const c = p.color(hex);
+    return [p.red(c) / 255, p.green(c) / 255, p.blue(c) / 255];
+  }
+
+  function normalizar(v: number[]): number[] {
+    const m = Math.hypot(v[0], v[1], v[2]) || 1;
+    return [v[0] / m, v[1] / m, v[2] / m];
+  }
+
+  function cruz(a: number[], b: number[]): number[] {
+    return [
+      a[1] * b[2] - a[2] * b[1],
+      a[2] * b[0] - a[0] * b[2],
+      a[0] * b[1] - a[1] * b[0],
+    ];
+  }
+
+  // --- Manejadores -----------------------------------------------------------
+
+  // p5 mapea el toque de un dedo a los eventos de mouse: tocar el lienzo da el
+  // empujón, igual que cerrar el ojo derecho.
+  p.mousePressed = () => {
+    if (p.mouseX < 0 || p.mouseX > p.width || p.mouseY < 0 || p.mouseY > p.height)
+      return;
+    empujar();
+  };
+
+  p.keyPressed = () => {
+    if (p.key === "s" || p.key === "S") p.saveCanvas(SLUG, "png");
+    if (p.key === "h" || p.key === "H") mostrarHud = !mostrarHud;
+    if (p.key === "t" || p.key === "T") saltarTextura();
+  };
+};
+2:["$","$L7",null,{"slug":"mascara-tunel","code":"$8"}]

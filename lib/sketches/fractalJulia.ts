@@ -1,0 +1,641 @@
+import type p5 from "p5";
+import type { SketchFactory } from "../types";
+import { Knob } from "../bibliotecas/knob";
+import { Boton, PanelEstado } from "../bibliotecas/boton";
+import { RastreadorManos } from "../bibliotecas/manosMediaPipe";
+import { SelectorCamara } from "../bibliotecas/camara";
+
+/**
+ * **Fractal de Julia** — un conjunto de Julia audio-reactivo cuya forma y paleta
+ * se gobiernan con la mano frente a la cámara.
+ *
+ * Port de un shader de Shadertoy (fuente: https://www.shadertoy.com/view/llB3W1,
+ * creado por **relampago2048**, 2015-04-08). El
+ * shader itera `z = z²·z_prev + seed` (una variante cúbica del Julia clásico; no
+ * es un Mandelbrot pese a que la referencia coloquial lo llame así) y lo samplea
+ * **tres veces** con distintos encuadres —`position`, `position/1.6` y la imagen
+ * invertida `pos2`— sumando las tres capas. La `seed` de cada capa sale del
+ * parámetro `punto`, y el generador de color `sin(f·2, f·3, f·7)` da los tonos
+ * vivos que caracterizan la pieza.
+ *
+ * Qué cambia respecto del original (el mapeo de control lo pidió el usuario):
+ *
+ * - **Micrófono → intensidad.** El audio entra por la textura `uAudio`
+ *   (el `iChannel0` de Shadertoy) para que `muestrearMusica()` y el anillo
+ *   radial `t3` sigan funcionando igual, pero su energía ya **no** decide la
+ *   forma: se re-enfoca como *brillo/glow global* sobre la salida. La perilla
+ *   "Sensibilidad" escala cuánto responde al sonido; "Intensidad" fija el brillo
+ *   base cuando no hay micrófono.
+ * - **Mano X (0–1) → paleta.** El color base del fractal se **rota de tono** en
+ *   RGB con un ángulo `uPaleta·2π`: mover la mano de lado a lado recorre el
+ *   espectro completo. Los coeficientes del generador coseno y el sesgo del
+ *   anillo de audio viajan como uniforms desde `CONFIG`/`PALETA` (ningún color
+ *   literal dentro del GLSL); el tinte global es casi neutro a propósito, para
+ *   no aplanar los tonos vivos al duotono verde de la galería.
+ * - **Mano Y (0–1) → forma.** La `seed` de Julia (`punto`) se libera del audio y
+ *   del reloj y la conduce la altura de la mano: `uForma` barre una arcada por la
+ *   región interesante del espacio de semillas. Las tres capas usan variantes
+ *   (pequeños offsets) del mismo `puntoBase`, como en el original, para que
+ *   cuajen coherentes. El `iTime` sobrevive solo como un movimiento sutil de base
+ *   (`CONFIG.velTiempo`), no como el motor de la forma.
+ *
+ * El `iMouse` del original estaba **muerto** (se computaba y no se usaba); no se
+ * revive. Sin cámara, la pieza cae al mouse (X→paleta, Y→forma) sobre el lienzo,
+ * y las perillas "Paleta"/"Forma" son el respaldo manual. Sin micrófono, la
+ * intensidad la maneja la perilla "Intensidad". La pieza es usable sin cámara y
+ * sin micrófono.
+ *
+ * Es la primera pieza de la galería que abre **cámara (MediaPipe/video) y
+ * micrófono (p5.sound/audio) a la vez**: son dos `getUserMedia` independientes,
+ * ambos con gesto del usuario para arrancar.
+ *
+ * Orientación de coordenadas (lo que más se rompe al portar Shadertoy a p5
+ * WEBGL): el cuad de pantalla completa usa un vertex shader que **ignora cámara
+ * y proyección** (`aTexCoord·2 − 1`), con `uv.y = 0` abajo, así el `vUv` coincide
+ * con el `fragCoord/iResolution` de Shadertoy (origen abajo-izquierda) sin
+ * ninguna inversión extra. No hay ping-pong: este shader no se lee a sí mismo,
+ * es un solo pase por frame.
+ */
+
+const SLUG = "fractal-julia";
+
+/**
+ * Paleta de la pieza. Aquí la paleta **es el punto de interacción** (la mano X
+ * la rota), así que el tinte global es casi neutro para no matar los tonos
+ * vivos del fractal; el verde queda para el HUD y el naranja para el glow de los
+ * picos de audio. Todos estos colores viajan al shader como uniforms: dentro del
+ * GLSL no queda ningún hex.
+ */
+const PALETA = {
+  fondo: "#050805", // matrix-black: canvas fuera del fractal y HUD
+  // Reemplaza el `vec3(0.5,0.1,0.5)` literal del original: sesga el anillo
+  // radial que colorea con el audio (morado). Sus tres canales deben ser > 0:
+  // el shader divide entre `t3`, que deriva de este color.
+  sesgoAudio: "#7f1a7f",
+  // Tinte global, casi blanco con un pelo de verde: da identidad sin aplanar la
+  // rotación de tono de la mano.
+  tinte: "#e0ffe8",
+  brillo: "#ff8c1a", // neon-orange: color del glow en los picos de audio
+  hudLinea: "#143b22", // matrix-line
+  hudAcento: "#00ff41", // matrix-green
+  hudTexto: "#7fffa8", // matrix-text
+} as const;
+
+const CONFIG = {
+  ancho: 900,
+  alto: 600,
+  /** Tope constante del bucle del fractal en GLSL. La perilla de calidad baja
+   *  de aquí; subirlo encarece cada frame (el fractal se samplea 3×). */
+  itersMax: 150,
+  /** Iteraciones al arrancar. */
+  itersInicial: 120,
+  /** Coeficientes del generador coseno original: sin(f·2), sin(f·3), sin(f·7). */
+  freqColor: [2.0, 3.0, 7.0] as [number, number, number],
+  /** Desfase por canal del generador (0 = idéntico al original). */
+  faseColor: [0.0, 0.0, 0.0] as [number, number, number],
+  /** Cuánto corre `iTime`: solo un movimiento sutil de base de la forma. */
+  velTiempo: 0.35,
+  /** Cuánto glow naranja añaden los picos de audio. */
+  glow: 0.55,
+  /** Ancho de la textura de audio (bins de la FFT). Potencia de dos. */
+  binsFFT: 512,
+  /** Suavizado de la FFT (0 = crudo, 1 = muy suave). */
+  suavizadoFFT: 0.7,
+  /** Lerp de mano/mouse hacia el uniform: sin él el control tiembla con el
+   *  jitter del landmark. */
+  suavizadoControl: 0.12,
+  /** Sensibilidad al audio inicial (multiplicador). */
+  sensibilidadInicial: 1.5,
+  /** Brillo base inicial (equivale al `pulse` base 0.5 del original). */
+  intensidadInicial: 0.6,
+  preview: 200,
+};
+
+/**
+ * Vertex shader del cuad de pantalla completa: **ignora cámara y proyección** y
+ * manda `aTexCoord` directo a clip space. Mismo truco que `mareaManos.ts` y
+ * `mascaraTunel.ts`. Con `uv.y = 0` abajo, el `vUv` coincide con el
+ * `fragCoord/iResolution` de Shadertoy sin inversión extra.
+ */
+const CUAD_VERT = `
+precision highp float;
+attribute vec3 aPosition;
+attribute vec2 aTexCoord;
+varying vec2 vUv;
+void main() {
+  vUv = aTexCoord;
+  gl_Position = vec4(aTexCoord * 2.0 - 1.0, 0.0, 1.0);
+}
+`;
+
+/**
+ * Fragment shader: el `mainImage` de Shadertoy portado a `main()`. Los uniforms
+ * implícitos de Shadertoy quedan explícitos: `uResolucion` (iResolution),
+ * `uTiempo` (iTime), `uAudio` (iChannel0). El resto controla el mapeo nuevo.
+ *
+ * `${CONFIG.itersMax}` se inyecta como constante del bucle: GLSL ES 1.00 exige
+ * tope constante de iteraciones, así que la calidad ajustable se implementa con
+ * un `break` cuando `i >= uIters` (uIters ≤ itersMax).
+ */
+const FRACTAL_FRAG = `
+precision highp float;
+varying vec2 vUv;
+
+uniform vec2 uResolucion;   // iResolution
+uniform float uTiempo;      // iTime (solo movimiento de base)
+uniform sampler2D uAudio;   // iChannel0: 1 fila = espectro FFT (ver el port)
+
+uniform int uIters;         // iteraciones activas (calidad), <= itersMax
+uniform vec3 uFreq;         // coeficientes del generador coseno (2,3,7)
+uniform vec3 uFase;         // desfase por canal del generador
+uniform float uPaleta;      // 0..1 mano X -> rotacion de tono
+uniform float uForma;       // 0..1 mano Y -> semilla del fractal
+
+uniform float uSensibilidad;   // escala la respuesta al audio
+uniform float uIntensidadBase; // brillo base (sin microfono)
+uniform float uGlow;           // intensidad del glow en los picos
+
+uniform vec3 uSesgoAudio;   // reemplaza vec3(0.5,0.1,0.5) del t3
+uniform vec3 uTinte;        // tinte global (casi neutro)
+uniform vec3 uBrillo;       // color del glow de picos (naranja)
+
+const int ITERS_MAX = ${CONFIG.itersMax};
+// Constante del original: ancla la base del conjunto en el espacio de semillas.
+const vec2 SEED_BASE = vec2(0.098386255, 0.6387662);
+
+int fractal(vec2 p, vec2 punto) {
+  vec2 so = (-1.0 + 2.0 * punto) * 0.4;
+  vec2 seed = SEED_BASE + so;
+  for (int i = 0; i < ITERS_MAX; i++) {
+    if (i >= uIters) break;                 // calidad ajustable
+    if (length(p) > 2.0) return i;
+    vec2 r = p;
+    p = vec2(p.x * p.x - p.y * p.y, 2.0 * p.x * p.y);
+    p = vec2(p.x * r.x - p.y * r.y + seed.x, r.x * p.y + p.x * r.y + seed.y);
+  }
+  return 0;
+}
+
+vec3 color(int i) {
+  float f = float(i) / float(uIters) * 2.0;
+  f = f * f * 2.0;
+  return vec3(sin(f * uFreq.x + uFase.x),
+              sin(f * uFreq.y + uFase.y),
+              abs(sin(f * uFreq.z + uFase.z)));
+}
+
+// Rotacion de tono en RGB alrededor del eje de grises (matriz de Rodrigues sobre
+// el vector (1,1,1)/sqrt(3)): recorre el circulo cromatico completo con la mano.
+vec3 rotarTono(vec3 c, float a) {
+  const vec3 k = vec3(0.57735026919);
+  float cosA = cos(a);
+  return c * cosA + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - cosA);
+}
+
+// sampleMusicA del original: lee la banda de frecuencia (y=0.25) de la textura.
+float muestrearMusica() {
+  return 0.5 * (texture2D(uAudio, vec2(0.15, 0.25)).x +
+                texture2D(uAudio, vec2(0.30, 0.25)).x);
+}
+
+void main() {
+  vec2 uv = vUv;                         // = fragCoord/iResolution de Shadertoy
+  float aspecto = uResolucion.x / uResolucion.y;
+
+  vec2 position = 3.0 * (-0.5 + uv);
+  position.x *= aspecto;
+
+  // iFC del original = iResolution - fragCoord  ->  1 - uv
+  vec2 uvInv = 1.0 - uv;
+  vec2 pos2 = 2.0 * (-0.5 + uvInv);
+  pos2.x *= aspecto;
+
+  vec4 t3 = texture2D(uAudio, vec2(length(position) / 2.0, 0.1));
+  float musica = muestrearMusica();
+  // El audio ahora es intensidad, no forma: alimenta el brillo global.
+  float pulse = uIntensidadBase + musica * uSensibilidad * 1.8;
+
+  // Semilla del fractal desde la mano Y. Un leve vaiven con el tiempo mantiene
+  // vivo el conjunto sin que el audio ni el reloj decidan la forma.
+  float t = uTiempo;
+  vec2 puntoBase = vec2(0.5 + 0.35 * sin(uForma * 3.14159265 + t * 0.1),
+                        uForma + 0.03 * sin(t * 0.2));
+
+  // Tres muestreos con offsets (como el original: x 0.5/0.55/0.6) -> coherentes.
+  vec3 invFract = color(fractal(pos2,         puntoBase + vec2(0.05, 0.02)));
+  vec3 fract4   = color(fractal(position / 1.6, puntoBase + vec2(0.10, -0.05)));
+  vec3 c        = color(fractal(position,     puntoBase));
+
+  // Mano X: rotacion de tono sobre las tres capas.
+  float ang = uPaleta * 6.28318530718;
+  c        = rotarTono(c, ang);
+  invFract = rotarTono(invFract, ang);
+  fract4   = rotarTono(fract4, ang);
+
+  t3 = abs(vec4(uSesgoAudio, 1.0) - t3) * 2.0;
+
+  vec4 fract01 = vec4(c, 1.0);
+  vec4 salida = fract01 / t3 + fract01 * t3 + vec4(invFract, 0.6) + vec4(fract4, 0.3);
+
+  salida.rgb *= pulse;   // intensidad global audio-reactiva
+  salida.rgb *= uTinte;  // identidad de paleta (casi neutro: no aplana el tono)
+  salida.rgb += uBrillo * max(musica * uSensibilidad, 0.0) * uGlow; // glow en picos
+
+  gl_FragColor = vec4(salida.rgb, 1.0);
+}
+`;
+
+export const fractalJulia: SketchFactory = (p: p5, P5?: typeof p5) => {
+  // p5.sound se instancia desde el constructor inyectado (igual que
+  // fftVisualization). No se usa Tone: esta pieza *analiza* el micrófono.
+  const Sound = P5 as unknown as {
+    AudioIn: new () => any;
+    FFT: new (smooth?: number, bins?: number) => any;
+  };
+
+  const rastreador = new RastreadorManos(p);
+
+  // --- Estado en clausura ---------------------------------------------------
+  let shaderFractal: p5.Shader;
+  /** Textura de audio (iChannel0): 1 fila = espectro FFT. Ver el port abajo. */
+  let texturaAudio: p5.Image;
+
+  let fft: any;
+  let mic: any;
+  let micActivo = false;
+  let micError = "";
+
+  // Parámetros de las perillas.
+  let sensibilidad = CONFIG.sensibilidadInicial;
+  let intensidadBase = CONFIG.intensidadInicial;
+  let paletaManual = 0.15;
+  let formaManual = 0.5;
+  let itersActual = CONFIG.itersInicial;
+
+  // Valores suavizados que llegan al shader (mano/mouse/perillas -> lerp).
+  let paletaSuave = paletaManual;
+  let formaSuave = formaManual;
+  /** De dónde salió el control este frame, para el HUD. */
+  let fuenteControl = "perillas";
+  /** Nivel de audio 0–1, solo para el HUD. */
+  let nivelAudio = 0;
+
+  let usarCamara = false;
+  let mostrarHud = true;
+  let selectorCamara: SelectorCamara;
+  let panelEstado: PanelEstado;
+  let botonMic: Boton;
+
+  p.setup = () => {
+    // Suspende el AudioContext hasta que haya gesto del usuario (P5Sketch llama
+    // userStartAudio al tocar el aviso de audio; el botón de micrófono también).
+    (p.getAudioContext() as AudioContext).suspend();
+
+    p.createCanvas(CONFIG.ancho, CONFIG.alto, p.WEBGL);
+    p.noStroke();
+    p.frameRate(60);
+    // La textura de audio es de una fila (POT 512×1): con REPEAT el anillo
+    // radial (u = length(position)/2, que puede pasar de 1) envuelve como en
+    // Shadertoy en vez de clavarse en el último bin.
+    p.textureWrap(p.REPEAT);
+
+    shaderFractal = p.createShader(CUAD_VERT, FRACTAL_FRAG);
+
+    // p5.sound: analizador + entrada de micrófono (aún sin arrancar).
+    mic = new Sound.AudioIn();
+    fft = new Sound.FFT(CONFIG.suavizadoFFT, CONFIG.binsFFT);
+
+    crearTexturaAudio();
+    crearControles();
+  };
+
+  p.draw = () => {
+    // background limpia color y profundidad; sin esto el cuad quedaría congelado
+    // en el primer frame por el z-test (mismo motivo que en mareaManos).
+    p.background(PALETA.fondo);
+
+    if (usarCamara && rastreador.activo) rastreador.actualizar();
+    leerControl();
+    actualizarTexturaAudio();
+
+    dibujarFractal();
+
+    if (mostrarHud) dibujarPreview();
+    panelEstado.actualizar(mostrarHud ? textoEstado() : "");
+  };
+
+  // --- Textura de audio (iChannel0) -----------------------------------------
+
+  /**
+   * Layout de la textura de audio, estilo Shadertoy pero reducido a lo que este
+   * shader realmente lee. Shadertoy entrega una textura de audio de 2 filas
+   * (inferior = espectro, superior = forma de onda) y este shader solo muestrea
+   * la **banda de frecuencia** (`y = 0.1` y `y = 0.25`, ambos en la mitad
+   * inferior). Por eso basta una textura de **una sola fila = el espectro FFT**:
+   * cualquier `y` la muestrea, y así se elimina de raíz la ambigüedad de
+   * orientación vertical de p5 (una imagen de 2 filas obligaría a saber si p5
+   * voltea la Y al subirla como textura). 512 bins de ancho = potencia de dos,
+   * apto para filtro lineal y wrap REPEAT.
+   */
+  function crearTexturaAudio() {
+    texturaAudio = p.createImage(CONFIG.binsFFT, 1);
+    // Arranca en cero: sin micrófono el espectro es plano y la intensidad la
+    // maneja la perilla.
+    texturaAudio.loadPixels();
+    for (let i = 0; i < texturaAudio.pixels.length; i += 4) {
+      texturaAudio.pixels[i] = 0;
+      texturaAudio.pixels[i + 1] = 0;
+      texturaAudio.pixels[i + 2] = 0;
+      texturaAudio.pixels[i + 3] = 255;
+    }
+    texturaAudio.updatePixels();
+  }
+
+  /** Vuelca el espectro FFT a la fila de la textura. Solo con micrófono activo. */
+  function actualizarTexturaAudio() {
+    if (!micActivo) {
+      nivelAudio = 0;
+      return;
+    }
+    const espectro: number[] = fft.analyze(); // 0..255, longitud binsFFT
+    texturaAudio.loadPixels();
+    let suma = 0;
+    for (let x = 0; x < CONFIG.binsFFT; x++) {
+      const m = espectro[x] | 0;
+      const idx = x * 4;
+      texturaAudio.pixels[idx] = m; // r = g = b = magnitud (escala de grises)
+      texturaAudio.pixels[idx + 1] = m;
+      texturaAudio.pixels[idx + 2] = m;
+      texturaAudio.pixels[idx + 3] = 255;
+      suma += m;
+    }
+    texturaAudio.updatePixels();
+    nivelAudio = suma / (CONFIG.binsFFT * 255);
+  }
+
+  // --- Dibujo ---------------------------------------------------------------
+
+  function dibujarFractal() {
+    p.push();
+    p.shader(shaderFractal);
+    shaderFractal.setUniform("uResolucion", [p.width, p.height]);
+    shaderFractal.setUniform("uTiempo", (p.millis() / 1000) * CONFIG.velTiempo);
+    shaderFractal.setUniform("uAudio", texturaAudio);
+    shaderFractal.setUniform("uIters", Math.round(itersActual));
+    shaderFractal.setUniform("uFreq", CONFIG.freqColor);
+    shaderFractal.setUniform("uFase", CONFIG.faseColor);
+    shaderFractal.setUniform("uPaleta", paletaSuave);
+    shaderFractal.setUniform("uForma", formaSuave);
+    shaderFractal.setUniform("uSensibilidad", sensibilidad);
+    shaderFractal.setUniform("uIntensidadBase", intensidadBase);
+    shaderFractal.setUniform("uGlow", CONFIG.glow);
+    shaderFractal.setUniform("uSesgoAudio", rgb(PALETA.sesgoAudio));
+    shaderFractal.setUniform("uTinte", rgb(PALETA.tinte));
+    shaderFractal.setUniform("uBrillo", rgb(PALETA.brillo));
+    p.plane(p.width, p.height);
+    p.pop();
+    p.resetShader();
+  }
+
+  /** Preview de la cámara con el esqueleto de las manos, abajo a la derecha. */
+  function dibujarPreview() {
+    if (!usarCamara) return;
+    const w = CONFIG.preview;
+    // WEBGL centra el origen: la esquina inferior derecha se calcula a mano.
+    const x = p.width / 2 - w - 16;
+    const y = p.height / 2 - w * 0.75 - 16;
+    p.push();
+    p.resetShader();
+    rastreador.dibujarPreview(x, y, w, {
+      linea: PALETA.hudAcento,
+      punto: PALETA.hudTexto,
+      marco: PALETA.hudLinea,
+    });
+    p.pop();
+  }
+
+  // --- Entrada: mano > mouse arrastrado > perillas --------------------------
+
+  /**
+   * Elige la fuente del control este frame. La mano manda: X → paleta,
+   * Y → forma (se invierte la Y para que subir la mano suba `uForma`). Si no hay
+   * mano, el mouse arrastrado sobre el lienzo hace lo mismo (era el mouse del
+   * original, ahora reasignado a paleta/forma). Si tampoco, las perillas
+   * "Paleta"/"Forma" son el respaldo manual. Todo se suaviza con un lerp.
+   */
+  function leerControl() {
+    let objPaleta = paletaManual;
+    let objForma = formaManual;
+    fuenteControl = "perillas";
+
+    if (usarCamara && rastreador.activo && rastreador.estado.manos.length > 0) {
+      const mano = rastreador.estado.manos[0];
+      objPaleta = p.constrain(mano.centro.x, 0, 1);
+      objForma = p.constrain(1 - mano.centro.y, 0, 1);
+      fuenteControl = "mano";
+    } else if (p.mouseIsPressed && dentroDelLienzo()) {
+      objPaleta = p.constrain(p.mouseX / p.width, 0, 1);
+      objForma = p.constrain(1 - p.mouseY / p.height, 0, 1);
+      fuenteControl = "mouse";
+    }
+
+    paletaSuave += (objPaleta - paletaSuave) * CONFIG.suavizadoControl;
+    formaSuave += (objForma - formaSuave) * CONFIG.suavizadoControl;
+  }
+
+  function dentroDelLienzo(): boolean {
+    return (
+      p.mouseX >= 0 && p.mouseX <= p.width && p.mouseY >= 0 && p.mouseY <= p.height
+    );
+  }
+
+  // --- Micrófono ------------------------------------------------------------
+
+  /**
+   * Alterna el micrófono. Exige gesto del usuario (`userStartAudio`) para
+   * reanudar el AudioContext. `mic.start` abre su propio `getUserMedia` de audio,
+   * independiente del de la cámara.
+   */
+  function alternarMic() {
+    p.userStartAudio();
+    if (!micActivo) {
+      mic.start(
+        () => {
+          micError = "";
+        },
+        () => {
+          micError = "sin permiso de micrófono";
+          micActivo = false;
+          botonMic.valor(false);
+        },
+      );
+      fft.setInput(mic);
+      micActivo = true;
+    } else {
+      mic.stop();
+      micActivo = false;
+    }
+  }
+
+  // --- Controles táctiles ---------------------------------------------------
+
+  function crearControles() {
+    new Knob(p, {
+      etiqueta: "Sensib.",
+      min: 0,
+      max: 3,
+      valor: sensibilidad,
+      paso: 0.05,
+      onChange: (v) => {
+        sensibilidad = v;
+      },
+    }).position(12, 10);
+
+    new Knob(p, {
+      etiqueta: "Intensidad",
+      min: 0,
+      max: 2,
+      valor: intensidadBase,
+      paso: 0.02,
+      onChange: (v) => {
+        intensidadBase = v;
+      },
+    }).position(76, 10);
+
+    new Knob(p, {
+      etiqueta: "Paleta",
+      min: 0,
+      max: 1,
+      valor: paletaManual,
+      paso: 0.01,
+      onChange: (v) => {
+        paletaManual = v;
+      },
+    }).position(140, 10);
+
+    new Knob(p, {
+      etiqueta: "Forma",
+      min: 0,
+      max: 1,
+      valor: formaManual,
+      paso: 0.01,
+      onChange: (v) => {
+        formaManual = v;
+      },
+    }).position(204, 10);
+
+    new Knob(p, {
+      etiqueta: "Calidad",
+      min: 30,
+      max: CONFIG.itersMax,
+      valor: itersActual,
+      paso: 5,
+      onChange: (v) => {
+        itersActual = v;
+      },
+    }).position(268, 10);
+
+    // Menú de cámaras: los `label` llegan vacíos hasta que hay permiso, por eso
+    // el selector trae su propio botón "Buscar cámaras".
+    selectorCamara = new SelectorCamara(p, {
+      ancho: 200,
+      onCambio: (deviceId) => {
+        // Cambio en caliente: reabrir el stream sin recargar el modelo.
+        if (usarCamara) void rastreador.iniciar(deviceId);
+      },
+    });
+    selectorCamara.position(660, 10);
+
+    botonMic = new Boton(p, {
+      etiqueta: "Micrófono",
+      alternar: true,
+      acento: "naranja",
+      onPress: () => alternarMic(),
+    });
+    botonMic.position(12, 540);
+
+    new Boton(p, {
+      etiqueta: "Cámara",
+      alternar: true,
+      onPress: (activo) => {
+        usarCamara = activo;
+        if (activo) void rastreador.iniciar(selectorCamara.valor());
+        else rastreador.detener();
+      },
+    }).position(130, 540);
+
+    new Boton(p, {
+      etiqueta: "HUD",
+      alternar: true,
+      activo: true,
+      onPress: (activo) => {
+        mostrarHud = activo;
+      },
+    }).position(228, 540);
+
+    new Boton(p, {
+      etiqueta: "Guardar",
+      onPress: () => p.saveCanvas(SLUG, "png"),
+    }).position(300, 540);
+
+    // El estado va en un panel DOM: en WEBGL, text() exige una fuente cargada.
+    panelEstado = new PanelEstado(p);
+    panelEstado.position(12, 508);
+  }
+
+  // --- HUD ------------------------------------------------------------------
+
+  function textoEstado(): string {
+    const estadoMic = micActivo
+      ? `micrófono: ON  nivel: ${nivelAudio.toFixed(2)}`
+      : micError
+        ? `micrófono: ${micError}`
+        : "micrófono: OFF (perilla Intensidad)";
+
+    let cam: string;
+    if (!usarCamara) {
+      cam = "cámara: apagada — mouse o perillas mueven paleta/forma";
+    } else {
+      switch (rastreador.fase) {
+        case "cargando":
+          cam = "cámara: cargando modelo…";
+          break;
+        case "sin-permiso":
+          cam = "cámara: permiso denegado — mouse/perillas";
+          break;
+        case "error":
+          cam = `cámara: error — ${rastreador.mensaje}`;
+          break;
+        case "activo":
+          cam =
+            rastreador.estado.manos.length === 0
+              ? "cámara: sin mano — mostrá la mano a la cámara"
+              : "mano: X→paleta  Y→forma";
+          break;
+        default:
+          cam = "cámara: apagada";
+      }
+    }
+    return `${cam}  ·  ${estadoMic}  ·  control: ${fuenteControl}`;
+  }
+
+  // --- Utilidades -----------------------------------------------------------
+
+  /** Hex de `PALETA` → `[r, g, b]` en 0–1, que es lo que espera el shader. */
+  function rgb(hex: string): number[] {
+    const c = p.color(hex);
+    return [p.red(c) / 255, p.green(c) / 255, p.blue(c) / 255];
+  }
+
+  // --- Manejadores ----------------------------------------------------------
+
+  p.keyPressed = () => {
+    if (p.key === "s" || p.key === "S") p.saveCanvas(SLUG, "png");
+    // `t` alterna el micrófono (atajo del original); también está el botón.
+    if (p.key === "t" || p.key === "T") {
+      botonMic.valor(!botonMic.valor());
+      alternarMic();
+    }
+    if (p.key === "h" || p.key === "H") mostrarHud = !mostrarHud;
+  };
+};

@@ -12,9 +12,11 @@ import { truncar } from "@/lib/text";
 export default function SketchInfo({
   meta,
   compact,
+  sm = false
 }: {
   meta: SketchMeta;
   compact?: boolean;
+  sm?: boolean;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -35,7 +37,7 @@ export default function SketchInfo({
         </p>
       )}
 
-      {meta.controls && meta.controls.length > 0 && (
+      {!sm && meta.controls && meta.controls.length > 0 ? (
         <div className="flex flex-col gap-2">
           <h3 className="text-xs uppercase tracking-wider text-crema/50">
             Controles
@@ -51,7 +53,13 @@ export default function SketchInfo({
             ))}
           </ul>
         </div>
-      )}
+      ) : (sm && meta.controls && meta.controls.length > 1) ?
+       <div className="flex flex-col gap-2">
+        <h3 className="text-xs uppercase tracking-wider text-crema/50">
+            Con interacción
+          </h3>
+       </div> : <></>
+      }
 
       <div className="flex flex-wrap gap-2">
         {meta.tags.map((tag) => (

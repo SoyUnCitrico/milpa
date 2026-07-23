@@ -16,6 +16,16 @@ apuntan a la biblioteca de `lib/bibliotecas/` que hay que **importar** en vez de
 reimplementar. La estructura común de toda pieza nueva vive en
 `lib/sketches/_plantilla.ts`.
 
+**Algoritmos que llegan de afuera.** No todo se escribe desde cero: parte del
+catálogo entra como GLSL portado de shadertoy.com. El buzón para eso es
+`lib/sketches/_entryShaderToy.glsl` — se pega ahí el shader con su URL y su
+autor, y `sketch-creator` lo convierte en pieza y vuelve a dejar el archivo
+vacío. La regla al documentarlo aquí es la misma que para lo escrito en casa,
+más dos exigencias propias del port: **acreditar autor y fuente**, y anotar lo
+que el port obligó a resolver (orientación de coordenadas, formato de
+framebuffer, pasadas separadas), que es justo lo que no está en el original y se
+vuelve a pelear si no queda escrito. Ver "Marea de Manos" como caso trabajado.
+
 ## Cómo decidir: ¿unificar o dejar aparte?
 
 Un algoritmo se documenta como **familia compartida** (con referencias
@@ -646,6 +656,57 @@ dispara en el **flanco** de cierre (con un refractario) — un parpadeo ejecuta 
 acción una sola vez. Es un segundo modelo, así que solo se carga si la pieza lo
 pide. Lo usa `florShader.ts` para guardar la imagen al cerrar los ojos.
 
+### Malla de la cara como geometría (biblioteca `RastreadorCara`, `lib/bibliotecas/caraMediaPipe.ts`)
+
+Hermana de `RastreadorManos`, pero deliberadamente **aparte**: aquella expone
+*gestos* de mano y un `onParpadeo` de "ambos ojos" del que dependen `florShader`
+y `florManos`, y tocarla para meterle geometría de cara sería arriesgar esas dos
+piezas. Ésta expone lo que necesita una pieza que quiere **la cara como
+superficie**: los 478 landmarks, la triangulación que los cose, la caja
+envolvente, la punta de la nariz y los blendshapes de parpadeo **por ojo
+separado** (`eyeBlinkLeft` / `eyeBlinkRight`).
+
+**Triangulación — el punto interesante.** `FaceLandmarker.FACE_LANDMARKS_TESSELATION`
+**no son triángulos**: son 2556 *aristas* (`{start, end}`), pensadas para
+dibujar la malla con `line()`. Para llenarla con triángulos hay dos caminos:
+pegar un blob de ~2700 índices copiados de la web (que se desincroniza del
+modelo y nadie puede auditar), o **derivar los 3-ciclos del grafo** una sola vez
+al arrancar:
+
+```
+adyacencia[a] ∪= {b}, adyacencia[b] ∪= {a}   para cada arista
+triángulo (a,b,c)  ⟺  a < b < c  ∧  b,c ∈ adyacencia[a]  ∧  c ∈ adyacencia[b]
+```
+
+El orden creciente `a < b < c` hace de dedupe sin necesidad de claves de texto.
+Resultado verificado contra el paquete instalado (`@mediapipe/tasks-vision`
+0.10.35): **468 vértices, 2556 aristas → 854 triángulos**, que es justo lo que
+se espera de una malla cerrada de ese tamaño (2556/3 = 852 caras nominales; los
+dos de más son 3-ciclos del grafo que no son caras y no se notan). La biblioteca
+guarda un `avisoMalla` si el número cae fuera de 700–1100, para que una malla
+rota se vea en el HUD en vez de dibujarse en silencio.
+
+**Espejado y winding.** Igual que en manos, la `x` se espeja (`x → 1 − x`) para
+que la pieza se lea como espejo. Espejar **invierte el winding** de los
+triángulos: quien dibuje con backface culling tiene que invertir el orden de los
+índices. p5 no culea caras por defecto, así que en la práctica no molesta — pero
+está documentado para que no sorprenda.
+
+**UV en espacio local de la cara.** `uvLocal(punto, caja)` devuelve la posición
+del landmark **dentro de la caja envolvente de todos los landmarks**. Es la
+diferencia entre una textura anclada a la cara y una que se desliza: si las UV
+se calcularan en espacio de pantalla, mover la cabeza arrastraría la textura por
+encima de la cara. Con la caja, todo se mueve junto.
+
+El resto es la disciplina ya resuelta en `manosMediaPipe.ts` (import dinámico,
+WASM/modelo por CDN, `iniciar(deviceId)` reentrante, `detectForVideo` guardado
+por `video.currentTime`, `fase`/`mensaje` para el HUD, preview compuesto en un
+`p5.Graphics` 2D). `outputFacialTransformationMatrixes` queda **apagado**: la
+pose de la cabeza ya viaja en la `z` de los propios landmarks (la malla se
+deforma sola al girar), y pedir la matriz obligaría a descomponerla para nada.
+
+Usado por: **Máscara en el Túnel** (`mascaraTunel.ts`).
+
 ### Entrada por cámara (biblioteca `camara.ts`)
 
 Infraestructura compartida para cualquier pieza que use la cámara:
@@ -674,8 +735,20 @@ sketch: p5 lo destruye al desmontar y `P5Sketch.tsx` además corta el
 
 Usado por:
 - **Flor de Manos** (`florManos.ts`), vía `RastreadorManos`.
+- **Flor de Shader** (`florShader.ts`), vía `RastreadorManos`.
+- **Marea de Manos** (`mareaManos.ts`), vía `RastreadorManos`.
+- **Máscara en el Túnel** (`mascaraTunel.ts`), vía `RastreadorCara`.
+- **Fractal de Julia** (`fractalJulia.ts`), vía `RastreadorManos` (primera pieza
+  que abre además el micrófono con p5.sound, dos `getUserMedia` a la vez).
+- **Caverna a Impulsos** (`cavernaImpulso.ts`), vía `RastreadorManos`.
 
 Consumido por:
+- **Marea de Manos** (`mareaManos.ts`) — el centro de la palma es el pincel que
+  inyecta agua en la simulación de fluido, y `apertura` alimenta un detector de
+  flancos del puño (histéresis + refractario, calcado de `detectarParpadeo`)
+  que dispara impulsos radiales. El tamaño aparente de la mano
+  (`dist(puntos[0], puntos[9])`, muñeca → nudillo medio) escala el radio del
+  pincel y del impulso. Ver su sección propia.
 - **Flor de Shader** (`florShader.ts`) — gestos repartidos entre sus tres
   cuerpos: dedos → pétalos, pinza → agudeza y puño → cuenco (dona), separación
   de manos → tamaño del núcleo esférico, altura de la mano → largo del tallo.
@@ -688,6 +761,17 @@ Consumido por:
   (`suave()`, factor 0.1) porque la lectura del modelo salta frame a frame y
   sin suavizado la flor tiembla. Los mismos parámetros quedan expuestos como
   `Knob`, así la pieza es usable sin cámara ni permiso.
+- **Fractal de Julia** (`fractalJulia.ts`) — solo dos parámetros continuos:
+  `centro.x` de la primera mano → rotación de tono de la paleta (0–1 → 0–2π),
+  `centro.y` (invertido, `1 − y`) → semilla del fractal. Ambos con lerp de
+  factor 0.12 hacia el objetivo. Cadena de prioridad mano > mouse arrastrado >
+  perillas "Paleta"/"Forma", igual filosofía que el pincel de `mareaManos`. Ver
+  su sección propia.
+- **Caverna a Impulsos** (`cavernaImpulso.ts`) — la mano no mueve nada de forma
+  continua: se usa solo su **tamaño aparente** (muñeca→nudillo medio) como proxy
+  de profundidad, y un detector de flancos (histéresis + refractario, calcado de
+  `detectarParpadeo`) dispara un impulso cuando la mano se acerca de golpe. Mismo
+  impulso que el botón "Adelante". Ver su sección propia.
 
 ### Flor de Shader — dona + núcleo + tallo, texturas procedurales en GLSL
 
@@ -776,7 +860,505 @@ Notas de WEBGL que costaron y conviene recordar:
   la geometría se recalcula entera cada frame (~2000 vértices) y reasignar esos
   arrays sería basura constante para el GC.
 
+### Marea de Manos — fluido en shader con ping-pong de framebuffers
+
+Primer algoritmo de la galería que **corre entero en la GPU y mantiene estado
+entre frames**: no dibuja figuras, reescribe un campo. Portado del *field sim*
+de Wyatt Flanders ("Me And My Neighborhood",
+`wyattflanders.com/MeAndMyNeighborhood.pdf`), un autómata celular continuo
+sobre una textura RGBA donde cada canal es una magnitud física:
+
+```
+xy = velocidad (energía ordenada)   b = presión (energía desordenada)   w = masa
+```
+
+**Las reglas, una por renglón** (`Me` en píxeles del campo, vecinos a ±1 px):
+
+```
+campo(pos) = LOOKUP(pos − LOOKUP(pos).xy)        // 1. advección con la velocidad
+E.b  = (pX.b + pY.b + nX.b + nY.b)/4             // 2. la presión difunde entera
+E.xy += vec2(nX.b − pX.b, nY.b − pY.b)/4         // 3. gradiente de presión = fuerza
+E.b  += (nX.x − pX.x + nY.y − pY.y)/4            // 4. divergencia de v → presión
+E.y  -= E.w · gravedad                           //    gravedad por unidad de masa
+E.w  += (nX.x·nX.w − pX.x·pX.w + nY.y·nY.w − pY.y·pY.w)/4   // 5. masa conservada
+```
+
+más una pared de 10 px en los bordes que anula la velocidad. La regla 1 es una
+**advección semi-lagrangiana de un paso**: se estima la velocidad en el punto y
+se lee el campo "de dónde vino" (`posición − velocidad`), lo que exige muestreo
+con **filtro lineal** porque la coordenada resultante es fraccionaria.
+
+**Ping-pong.** Cada píxel necesita el frame anterior del campo (el suyo y el de
+sus cuatro vecinos), y la GPU prohíbe leer y escribir la misma textura en una
+pasada. La pieza mantiene **dos `p.createFramebuffer()`**: dibuja en B leyendo
+A, los intercambia, y al frame siguiente al revés. Detalles que hacen o rompen
+esto en p5 1.9.4:
+
+- **Formato del campo.** Un target de 8 bits sin signo (el default) mata la
+  simulación: las velocidades son negativas y del orden de centésimas de píxel.
+  Se pide `float` solo si el equipo soporta `EXT_color_buffer_float` +
+  `EXT_float_blend` (p5 deja `GL_BLEND` prendido incluso en modo `REPLACE`, y
+  mezclar sobre un target de 32 bits lo exige) + `OES_texture_float_linear` (la
+  advección necesita filtro lineal); si no, cae a `half-float`, que en WebGL2 ya
+  es filtrable de fábrica. p5 degrada el formato **en silencio** (solo un
+  `console.warn`), así que la pieza compara `fb.format` con lo pedido y lo avisa
+  en el HUD.
+- **`blendMode(REPLACE)` obligatorio** durante la pasada de simulación: con la
+  mezcla normal, el canal `w` (masa) haría de alfa y el resultado se fundiría
+  con el contenido viejo del target, corrompiendo el campo. Se restaura `BLEND`
+  para el display y el preview de cámara.
+- **`antialias: false` y `density: 1`** en los framebuffers: un target
+  multimuestreado no sirve como textura de datos, y el campo tiene su propia
+  resolución (mitad del lienzo), ajena al `pixelDensity` del retina.
+- **Siembra en las dos texturas.** El estado inicial (mar lleno hasta
+  `nivelMar`) es un valor absoluto, no un incremento: hay que escribirlo en los
+  dos targets, porque el frame siguiente lee el que quedó de origen.
+
+**Orientación de coordenadas** — la parte que más se rompe al portar Shadertoy
+a p5 WEBGL. Las dos pasadas usan el mismo vertex shader de cuad de pantalla
+completa, que **ignora cámara y proyección** y manda `aTexCoord` directo a clip
+space (`uv·2 − 1`, el mismo truco que el fondo de `florShader.ts`). Así la
+coordenada de escritura y la de lectura de la textura son la misma `uv`, y la
+cadena entera queda auto-consistente sin razonar sobre la cámara de p5. El
+costado: `uv.y = 0` es el **fondo** de la pantalla, igual que en Shadertoy — la
+gravedad `−y` cae hacia abajo sola, y las posiciones que llegan en coordenadas
+de imagen (mano de MediaPipe y `mouseY`, con `y` hacia abajo) se invierten con
+`1 − y`.
+
+**Display pass.** El original es `color = densidad.wwww` (una nube gris). Acá:
+la masa interpola abismo → verde-agua → cresta; el **gradiente de la masa** hace
+de normal (`normalize(vec3(−∂w/∂x, −∂w/∂y, 0.35))`) para un difuso que ilumina
+la pendiente de la ola; la **magnitud de la velocidad** enciende la espuma
+(`smoothstep(vel) · smoothstep(masa)`), y el naranja aparece solo como
+`pow(luz, 8) · espuma`, es decir en las crestas rápidas y bien orientadas —
+acento puntual, no baño.
+
+**Interacción.** El `iMouse` del original se reemplaza por la mano
+(`RastreadorManos`, ver la familia de MediaPipe): la palma es un pincel que
+deposita masa, y el flanco del puño dispara un **impulso radial** que se suma a
+`E.xy` con perfil gaussiano `exp(−d²/2σ²)` y signo: `−1` al cerrar (implosión,
+el agua se succiona hacia la mano), `+1` al abrir (onda expansiva). El impulso
+no es un estado sino un golpe: decae por un factor por frame hasta apagarse. Sin
+cámara, el dedo sobre el lienzo hace de pincel y dos botones disparan los mismos
+impulsos.
+
+**Añadidos al original**, todos por estabilidad: amortiguación de la velocidad
+(la perilla Espesor) y topes de velocidad, presión y masa. El esquema es
+explícito y sin ellos acumula energía con cada impulso fuerte hasta reventar en
+ruido.
+
+No comparte biblioteca con la **Flor de Shader**: aquella usa GLSL para *teñir*
+geometría que la CPU genera cada frame, ésta usa GLSL como *motor de estado* y
+la geometría es un cuad fijo. Comparten el medio (shaders en WEBGL) pero ni la
+estructura ni el propósito visual — 1 de 3 en "Cómo decidir", así que va en
+sección propia.
+
+### Máscara en el Túnel — plasma acumulativo + raymarch, cosidos por una cámara compartida
+
+Primera pieza de la galería que junta **dos shaders de Shadertoy distintos** en
+una escena y **mezcla malla 3D real con un raymarch de pantalla completa**. Los
+dos algoritmos se documentan por separado, porque son independientes; lo que
+sigue después es lo que costó unirlos, que es la parte que no está en ningún
+Shadertoy.
+
+**Shader 1 — plasma acumulativo (textura de la máscara).** Sin autor ni URL: el
+GLSL llegó al buzón sin acreditación, así que queda pendiente de que se aporte.
+Dieciocho vueltas de un bucle sobre un plano `u` centrado y normalizado por la
+altura:
+
+```
+v  = cos(t·(3,2) + (0,11)) − 6u                    // centro móvil, por iteración
+u *= rot(i − 0.1t)                                 // rotación acumulativa
+u += cos(4 / exp(|o|²/100) + t) / 5                // realimentación: lo ya acumulado desplaza el plano
+q  = sin( u/(2 − u·u) − 9·u.yx + t )               // inversión + swizzle: filamentos
+q *= 1 + i·(v·v)                                   // el anillo se aprieta con la iteración
+o += (cos(pesos + t) + 1) / |q|                    // paleta coseno, acumulada
+o *= 0.15;   o -= (u·u)/30                         // ganancia + viñeta
+```
+
+Tres cosas explican cómo se ve: la **realimentación** (`exp(|o|²)` en el
+desplazamiento) hace que las zonas ya brillantes se desplacen distinto de las
+oscuras, lo que crea los filamentos; la **inversión** `u/(2 − u·u)` concentra
+detalle cerca del origen; y la **viñeta** final garantiza que lo brillante y
+detallado quede en el centro del encuadre. Los colores salen de la paleta coseno
+`cos(vec4(1,8,4,0) + t)`, que es lo que le da su carácter cromático — se
+conserva del original (pesos y tinte base viajan como uniforms desde `PALETA` y
+`CONFIG`, sin literales dentro del GLSL, pero no se sustituyen por el duotono de
+la galería).
+
+En la pieza `iTime` **no es el reloj**: como `t` se incrementa *dentro* del
+bucle, el uniform funciona como **semilla** — valores distintos dan texturas
+distintas, no una animación continua. Va congelado y la textura se hornea a un
+framebuffer de 512² **solo cuando la fase cambia** (perilla u ojo izquierdo) o
+cuando la nariz se corre más de 0.008 en UV. El encuadre se centra en `uCentro`
+en vez de en el medio de la imagen: pasarle la UV de la nariz es lo que clava la
+zona brillante **sobre la nariz**.
+
+**Shader 2 — túnel raymarcheado (fondo).** Trae anotada la referencia
+`https://www.shadertoy.com/view/mlXyDn`, pero por el texto que la rodea no es
+seguro que sea la URL del propio shader en vez de una referencia a otro: queda
+registrada como *referencia anotada en el original*, no como fuente confirmada.
+El eje del tubo es una curva de Lissajous en `z`:
+
+```
+camino(z)  = ( 2·sin(0.2z),  cos(0.3z) )
+camino2(z) = ( sin(0.24z),  2·cos(0.04z) )        // tubo ramal
+textura(p) = −Σ_{a=.5,1,2,…,32} |Σ sin(8a·p)| / a  // grano fractal de la pared
+map(p)     = min( 1.05 − min(d2, min(d1, 1)) + 0.04·textura(p),  bl2 )
+```
+
+`d1`/`d2` son la distancia al eje de cada tubo: como el campo es `1.05 − d`, el
+signo está invertido respecto de una esfera y lo que se marchea es el **interior**
+del tubo. `min(d1, 1)` aplana el campo lejos del eje, que es lo que evita que el
+rayo se pase de largo en las curvas. El color de la pared (`cor`) sale como
+efecto lateral de `map()`: un `smoothstep` sobre `d1` que mezcla pared clara y
+fondo oscuro. El brillo final es `3.5/i` con `i` el número de pasos: menos pasos
+= superficie cercana = más brillo, un *ambient occlusion* de pobre que sale
+gratis.
+
+**Lo que exigió el port a p5 WEBGL (GLSL ES 1.00):**
+
+- **No hay `tanh`** en ES 1.00. La única llamada estaba en `bl1`, la esfera que
+  rebotaba — y `bl1` se elimina de todos modos.
+- **No hay `mat2x3`.** La construcción del rayo se escribe a mano:
+  `D += rt·sx + cross(D,rt)·sy`, que es exactamente lo mismo.
+- **Bucles de tope constante**: los `while` abiertos pasan a `for` con `break`
+  (120 pasos de marcha, 7 octavas de grano, 18 vueltas de plasma).
+- `p/p` de `textura()` pasa a `vec3(1.0)`: idéntico salvo por los NaN que el
+  original produce si alguna componente vale exactamente 0.
+- `mat2(vec4)` del `#define rot` se expande a cuatro escalares: es terreno
+  resbaladizo según el compilador de ES 1.00 y el resultado es el mismo.
+- **Orientación**: cuad de pantalla completa cuyo vertex shader ignora cámara y
+  proyección (mismo truco que `mareaManos.ts`), así `uv.y = 0` es abajo y
+  `(uv − .5)·(aspect, 1)` **es** el `(fragCoord − R/2)/R.y` de Shadertoy, sin
+  ninguna inversión extra.
+- `pixelDensity(1)`: el raymarch cuesta por píxel y dejar que p5 duplique la
+  densidad en retina cuadruplica el trabajo sin ganancia visible.
+
+**Cosido 1: la máscara ocupa el lugar de `bl1`.** El original tenía dos esferas
+brillantes recorriendo los tubos. `bl1` se **borra del SDF** y su lugar lo toma
+la malla de la cara — pero su aporte de luz no se pierde: el término
+`o += .8·exp(−bl1)` se recalcula desde la **posición real de la máscara**, que
+llega como uniform `uMascara`. Ese detalle es lo que hace que la máscara
+*pertenezca* a la escena en vez de estar pegada encima: ilumina la pared del tubo
+a su paso, y el empujón del ojo derecho se ve tanto en la máscara como en el
+reflejo del tubo. `bl2` (la brasa del tubo ramal) **se conserva**: corre por
+`camino2`, que a esas profundidades queda a ~3 unidades del tubo principal, así
+que no compite visualmente con la máscara y aporta profundidad y el acento
+naranja. Tiene interruptor propio por si en alguna corrida molesta.
+
+**Cosido 2: la cámara de p5 replica la del shader.** Es la parte que hay que
+hacer bien o la máscara se sale del tubo en las curvas (y estar centrada en
+pantalla **no** es prueba de nada — el criterio es que se mantenga dentro del
+tubo mientras el túnel serpentea). El shader define:
+
+```
+ojo    = (camino(t − .1), t − .1)
+mira   = (camino(t), t)
+D      = normalize(mira − ojo)
+rt     = (D.z, 0, −D.x)          up = cross(D, rt)
+rayo   = D + rt·sx + up·sy       con sx,sy = (fragCoord − R/2)/R.y
+```
+
+Eso es un **pinhole de distancia focal 1 medido sobre media altura de pantalla**,
+o sea **FOV vertical = 2·atan(0.5) ≈ 53°**. En p5:
+`perspective(2·atan(0.5), w/h, …)` + `camera(ojo, mira, −up)`. El `up` va
+**negado** porque `Camera.perspective` de p5 arma la proyección con `−f·yScale`
+—invierte la Y de pantalla, que es la razón de que en WEBGL la `y` positiva vaya
+hacia abajo—; sin ese signo la máscara aparecería boca abajo respecto del túnel.
+Con eso, trasladar la malla a `(camino(z), z)` basta para que caiga exactamente
+donde iba la esfera, y se conserva la rotación 3D de la cabeza (que se perdería
+si se proyectara a mano en espacio de pantalla).
+
+**Cosido 3: profundidad entre capas.** El cuad del túnel se dibuja con
+`DEPTH_TEST` desactivado (con el test apagado tampoco escribe profundidad), se
+vuelve a activar y se limpia el buffer; la malla se dibuja encima con su z real.
+Antes del preview de cámara se limpia otra vez y se restauran `perspective()` y
+`camera()` por defecto: `p.image()` en WEBGL usa la cámara vigente, y la del
+túnel lo mandaría a otro sitio con valores de z de otra proyección. Mismo
+esquema de "algoritmo del pintor por capa" que usa `florShader.ts`.
+
+**Recorrido de la máscara.** Un offset **relativo a la cámara** (que va en
+`z = t − .1`), de `zLejos` (media profundidad del túnel visible) a `zCerca`
+(justo delante), en loop:
+
+```
+z = (t − .1) + lerp(zLejos, zCerca, faseLoop)     xy = camino(z)
+```
+
+El `xy` **tiene** que seguir `camino(z)` —la misma función replicada en
+TypeScript, alimentada por los mismos cuatro números que el shader recibe como
+uniform— o la máscara se sale del tubo en cuanto el túnel gira.
+
+**Interacción por ojos.** Detección **por ojo separado**, con la misma disciplina
+de flancos que `detectarParpadeo` (dos umbrales con histéresis + refractario de
+420 ms, para que un ojo entrecerrado no dispare un evento por frame):
+
+- **ojo izquierdo cerrado (flanco)** → salta la fase congelada del plasma: la
+  máscara cambia de textura y de colores. Sostenido, la fase deriva despacio
+  (1.6/s) para buscar un fotograma en vez de saltar a ciegas.
+- **ojo derecho cerrado (flanco)** → empujón: adelanta la fase del loop de
+  profundidad y sube el destello que la máscara arroja sobre el tubo (un golpe
+  que decae solo, como el impulso de `mareaManos`).
+
+Nomenclatura: `eyeBlinkLeft` es el ojo **izquierdo del sujeto**, y como el
+preview está espejado ese ojo aparece a la derecha de la imagen. La metadata lo
+describe desde el punto de vista del usuario ("cerrar el ojo izquierdo"), que es
+lo que importa. "Ambos ojos" **no** se usa para nada: se solaparía con los dos
+flancos individuales; guardar va por tecla `s` y su botón.
+
+Un detalle de acoplamiento que muerde: la deriva lenta del ojo sostenido es más
+chica que el paso del `Knob` de fase, así que reflejarla en la perilla con
+`Knob.value()` —que cuantiza y **dispara su propio `onChange`**— anulaba el
+avance y la fase no se movía nunca. Hay una guarda de reentrada para eso.
+
+Sin cámara la pieza sigue viva: el túnel vuela igual y la máscara se sustituye
+por un plano con la misma textura recorriendo el mismo loop de profundidad, con
+el HUD explicando por qué. Todas las perillas y botones (incluidos los
+equivalentes táctiles de los dos ojos) siguen funcionando.
+
+No se unifica con **Marea de Manos** ni con **Flor de Shader** pese a compartir
+el medio: aquella usa GLSL como *motor de estado* con ping-pong de framebuffers,
+la Flor lo usa para *teñir* geometría generada en CPU, y ésta combina *raymarch
+de pantalla completa* con una malla capturada del mundo real. Comparten
+herramientas, no algoritmo — 1 de 3 en "Cómo decidir", así que va en sección
+propia.
+
 ---
+
+### Fractal de Julia — Julia audio-reactivo con audio→intensidad y mano→forma/paleta
+
+Port de un shader de Shadertoy (`https://www.shadertoy.com/view/llB3W1`,
+creado por **relampago2048**, 2015-04-08). Es el
+primer sketch de la galería que abre **cámara (MediaPipe/video) y micrófono
+(p5.sound/audio) a la vez**: dos `getUserMedia` independientes, ambos con gesto
+del usuario para arrancar.
+
+**El algoritmo del fractal.** No es un Mandelbrot (aunque el pedido coloquial lo
+llame así), sino un **conjunto de Julia** de iteración cúbica. Para cada píxel,
+partiendo de `p` = posición en el plano y una `seed` fija por capa:
+
+```
+z = (z.x² − z.y², 2·z.x·z.y)                       // z² (paso cuadrático)
+z = (z·r − …, r·z + …) + seed   con r = z anterior  // z²·z_prev + seed
+escapa cuando |z| > 2, devolviendo la iteración i
+```
+
+La `seed` sale de `SEED_BASE + (−1+2·punto)·0.4`, con `SEED_BASE =
+(0.098386255, 0.6387662)` (constante del original). El **color** de cada píxel
+es una función coseno de la iteración de escape, `sin(f·2, f·3, |f·7|)` con
+`f = (i/iters·2)²·2`: la banda de escape da los tonos vivos.
+
+**Triple sampleo.** La imagen es la suma de tres capas del mismo fractal con
+distinto encuadre: `position` (base), `position/1.6` (acercada) y `pos2` = el
+plano invertido (`1 − uv`). Se combinan con un anillo radial coloreado por el
+audio (`t3`): `salida = c/t3 + c·t3 + invFract·0.6 + fract4·0.3`. La división por
+`t3` es la que provoca el bloom/glitch brillante donde el audio marca.
+
+**Cómo entra el audio (textura `iChannel0`).** El shader lee la textura de audio
+en `y = 0.25` (`muestrearMusica`, banda de frecuencia) y `y = 0.1` (el anillo
+`t3`), **ambos en la mitad inferior** (`y < 0.5`). Shadertoy sirve esa textura
+como 2 filas (espectro abajo, forma de onda arriba); acá se construye desde la
+FFT de p5.sound como una imagen de **una sola fila = el espectro** (512 bins,
+potencia de dos). Una fila basta porque el shader nunca lee la mitad superior, y
+**elimina la ambigüedad de si p5 voltea la Y** al subir la imagen como textura
+(con 2 filas habría que saberlo). La textura va con filtro lineal (default de p5
+para imágenes) y `textureWrap(REPEAT)`, porque el anillo `t3` muestrea en
+`u = length(position)/2`, que puede pasar de 1 y debe envolver como en el
+original.
+
+**El mapeo de control reasignado** (lo que separa esta pieza del shader
+original):
+
+- **Micrófono → intensidad, no forma.** En el original `pulse = 0.5 +
+  sampleMusicA()·1.8` entraba en `point.y` (la forma). Acá `pulse` se re-enfoca
+  como **brillo global** (`salida·pulse`) más un **glow naranja en los picos**
+  (`+ uBrillo·musica·uSensibilidad·uGlow`). `muestrearMusica` y `t3` siguen
+  leyendo la textura igual, así el carácter audio-reactivo se conserva. La
+  perilla "Sensibilidad" escala la respuesta; "Intensidad" fija el brillo base
+  (manda sin micrófono, cuando la textura es plana en cero).
+- **Mano X → paleta.** El color base se **rota de tono** en RGB con la matriz de
+  Rodrigues sobre el eje de grises `(1,1,1)/√3`, ángulo `uPaleta·2π`: la mano de
+  lado a lado recorre el círculo cromático completo. Los coeficientes del
+  generador coseno (`uFreq`, `uFase`), el sesgo del anillo de audio
+  (`uSesgoAudio`, que reemplaza el `vec3(0.5,0.1,0.5)` literal) y el tinte global
+  viajan como uniforms desde `CONFIG`/`PALETA`: **ningún color literal dentro del
+  GLSL**. El tinte es casi neutro a propósito, para no aplanar los tonos vivos al
+  duotono verde de la galería — aquí la paleta es el punto de interacción.
+- **Mano Y → forma.** `uForma` (0–1) barre `puntoBase` por el espacio de
+  semillas: `x = 0.5 + 0.35·sin(uForma·π + t·0.1)`, `y = uForma + 0.03·sin(t·0.2)`.
+  Las tres capas usan variantes (offsets `+(0.05,0.02)`, `+(0.10,−0.05)`) del
+  mismo `puntoBase`, como el original desfasaba `0.5/0.55/0.6` en X. El `iTime`
+  sobrevive solo como el término `t·0.1`/`t·0.2` (movimiento sutil de base,
+  `CONFIG.velTiempo`), no como el motor de la forma.
+- El `iMouse` del original estaba **muerto** (se computaba sin usarse); no se
+  revive. El mouse arrastrado sobre el lienzo es el fallback de la mano
+  (X→paleta, Y→forma), y las perillas "Paleta"/"Forma" el respaldo manual.
+
+**Port a p5 WEBGL.** Cuad de pantalla completa con el vertex shader neutro de
+`mareaManos.ts`/`mascaraTunel.ts` (ignora cámara y proyección, `uv.y = 0` abajo
+→ `vUv` coincide con el `fragCoord/iResolution` de Shadertoy). Un solo pase por
+frame, **sin ping-pong** (el shader no se lee a sí mismo). `mainImage → main`,
+`texture → texture2D`. GLSL ES 1.00 exige tope constante de iteraciones, así que
+la calidad ajustable (perilla, 30–150) se hace con un `break` cuando
+`i >= uIters` dentro de un bucle de tope `ITERS_MAX` constante. **Rendimiento:**
+el fractal se samplea 3× por píxel con hasta 150 iteraciones cada uno — es la
+parte cara y la que la perilla "Calidad" alivia.
+
+La textura de audio se construye inline (no se extrajo a `lib/bibliotecas/`):
+está acoplada a lo que este shader espera de `iChannel0` y no hay otra pieza que
+la comparta todavía.
+
+### Caverna a Impulsos — río subterráneo raymarcheado, avance por impulso con inercia acumulable
+
+Port de un shader de Shadertoy **de una sola pasada de pantalla completa** (como
+`fractal-julia`: no se lee a sí mismo, así que **sin ping-pong** ni
+framebuffers de estado). **Sin autor indicado.** El GLSL traía cuatro enlaces
+anotados a modo de referencia/inspiración: `playlist/cXBGzV`, "Rio Subterraneo"
+`https://www.shadertoy.com/view/4cyyRc`, "glass volumetric dda test"
+`https://www.shadertoy.com/view/4fGyWG` y `playlist/m3BSDD`. Por el tema
+(caverna con río) **"Rio Subterraneo" (`4cyyRc`) es la fuente más probable, pero
+NO está confirmada**; los otros parecen inspiración. Quedan como *referencias
+anotadas en el original*; falta acreditar al autor.
+
+**El raymarch.** `map()` es el SDF de la escena:
+
+```
+sf     = grano fractal de la pared (trap(p·.384 + trap(p.yzx·.192)))
+tunel  = 1.5 − |p.xy·(.5,.7071)|·openCave(t) + sf     // tubo, eje en path(z)
+agua   = p.y + waterSurf(p)                            // superficie ondulante
+map    = min(tunel, agua)                              // svObjID = step(tunel, agua)
+```
+
+- `path(z) = (2.4·sin(.15z), 1.7·cos(.25z))` es el eje serpenteante del tubo;
+  `openCave` (una `tanh` de `cos(.05z)`) hace **respirar** el radio.
+- El agua se marchea **dos veces**: la primera choca con su superficie; luego se
+  refracta el rayo (`refract`, IOR 1/1.33) y se **vuelve a marchar** (con la
+  bandera global `G` que hace a `map` devolver solo el túnel) para ver el fondo a
+  través del agua. `svObjID` distingue roca (verde) de agua (cian) en `doColor`;
+  el especular es el naranja de acento. Normales por diferencias finitas, AO de 4
+  muestras y `bumpMap` de ruido sobre la roca: por eso es **caro**.
+
+**La esfera, quitada del SDF pero conservada como luz.** El original fundía una
+bola con el túnel (`min(tunel, ball)`) que era a la vez geometría visible y la
+luz de la escena (su posición `lp`). Aquí se elimina el `min(tunel, ball)` —la
+bola deja de renderizarse y de ocluir— pero `lp` se sigue calculando con
+`ballMovez`/`ballMoveXY` (dos `tanh` más) y viaja a `doColor()` como la posición
+de la luz. La cueva queda iluminada por un foco que se mueve por dentro donde iba
+la bola. Es exactamente el patrón de `bl1` en `mascaraTunel`.
+
+**Avance por impulso con inercia acumulable — lo propio de la pieza.** En el
+original la cámara avanzaba sola con `iTime` (`ro.z = iTime`). Aquí `iTime` se
+parte en dos uniforms:
+
+- `uAvance` mueve la cámara (`ro.z`) y **solo crece con los impulsos**;
+- `uTiempo = uAvance + derivaAmbiente·relojReal` es el reloj **ambiental** (agua
+  fluyendo `waterSurf`, luz meciéndose `ballMovez`, cueva respirando `openCave`,
+  textura `bumpFunc`). En reposo el mundo queda casi quieto salvo la deriva
+  mínima; el **desplazamiento hacia adelante nunca viene del reloj**.
+
+La física es un modelo de impulso/momento en TypeScript:
+
+```
+cada frame:   avance += velocidad ;  velocidad *= friccion   // friccion < 1
+un impulso:   velocidad = min(velocidad + IMPULSO, VEL_MAX)
+```
+
+Un impulso hace planear ~`IMPULSO·friccion/(1−friccion)` unidades y detenerse
+tras unos pasos; **repetir impulsos acumula velocidad** hasta `VEL_MAX`, así se
+va más rápido si se insiste. Valores por defecto: `IMPULSO 0.35`, `friccion 0.90`
+(un tap → planear ~3 u en ~0.7 s), `VEL_MAX 1.0`; todos con Knob. Un **medidor**
+en el HUD muestra `velocidad/VEL_MAX` para que el empujón y la inercia se vean.
+
+**Gesto de acercar la mano** (con `RastreadorManos`, sin modificarla): la
+biblioteca **no expone distancia a la cámara**, así que el proxy de profundidad
+se deriva dentro del sketch como el **tamaño aparente** de la mano —distancia
+muñeca→nudillo medio, `dist(puntos[0], puntos[9])`, igual que `mareaManos`—: mano
+más grande = más cerca. El empujón es un **flanco de acercamiento** detectado con
+la misma disciplina que `detectarParpadeo`: histéresis (umbral cerca 0.17, umbral
+lejos 0.10 → hay que **alejar** la mano para armar el siguiente) + refractario
+(500 ms) sobre el tamaño **suavizado** con lerp (α 0.4), o el jitter del landmark
+dispararía ráfagas. Cada empujón detectado inyecta el **mismo** impulso que el
+botón, y el marco del preview parpadea naranja como feedback. Sin cámara la pieza
+es plenamente jugable: el botón "Adelante", el toque en el lienzo, la barra
+espaciadora y las perillas cubren todo.
+
+**Port a GLSL ES 1.00.** El shader usa `tanh` (en `openCave`, `ballMovez`,
+`ballMoveXY`), que **no existe** en WebGL1: va polyfilleada con `tanh_(x) =
+(e^{2x}−1)/(e^{2x}+1)` con el argumento acotado a ±10 (satura a ±1 mucho antes,
+así que es exacto y `exp` no desborda). El `while(i++ < 96.)` de las dos marchas
+pasa a `for` con tope constante `MAX_PASOS` y `break` por `uPasos` (Knob
+"Calidad", 24–96); todas las variables locales se inicializan; `iResolution →
+uResolucion`. Orientación resuelta con `fragCoord = vUv·uResolucion` (vUv.y = 0
+abajo, coincide con Shadertoy sin flip). **Rendimiento:** es la pieza más pesada
+de la galería — dos marchas de hasta 96 pasos por píxel más AO y normales por
+diferencias finitas; `pixelDensity(1)` y la perilla "Calidad" son las palancas.
+
+### Filtros de Cámara — banco de post-procesos de Shadertoy sobre una cámara compartida
+
+Cuatro shaders llegaron **juntos** al buzón `_entryShaderToy.glsl`, y los cuatro
+comparten la misma convención: son *image passes* que reciben la webcam por
+`iChannel0` y la reescriben píxel a píxel. En vez de una pieza por shader, se
+generaliza esa convención en **un pipeline con un registro de filtros**
+(`FILTROS`): una sola cámara, un solo cuad de pantalla completa, y cada entrada
+aporta solo su `main()`. Agregar un filtro = agregar una entrada (instrucciones
+en el bloque sobre `FILTROS` dentro de la pieza), sin tocar el pipeline.
+
+**Cámara compartida.** El `<video>` (biblioteca `camara.ts`) se vuelca a un
+`p5.Graphics` 2D —espejado y recortado a *cover* una sola vez— que viaja al
+shader como `uCamara`; el cuadro anterior se copia a `uPrev` **antes** de
+redibujar, para los filtros temporales. Clave de p5 1.9.4: una fuente
+`p5.Graphics` cae en la rama `else` de `Texture.update()` y **se re-sube como
+textura cada frame** (a diferencia de `p5.Image`, que solo se sube si está
+`modified`), así que no hace falta framebuffer ni `loadPixels`. Ambos graphics
+van a `pixelDensity(1)` para que `drawImage` trabaje en px lógicos sin el factor
+retina y las dos texturas queden alineadas.
+
+**Orientación.** Cuad con el vertex shader de siempre (`aTexCoord·2 − 1`,
+`vUv.y = 0` abajo, como en `mareaManos`/`cavernaImpulso`). La textura de cámara
+de p5 tiene el eje Y al revés que ese `vUv`, así que **todo** el muestreo pasa
+por los macros `CAM()`/`PREV()` del PRELUDIO (nunca `texture2D(uCamara,…)`
+directo): son el único lugar donde se decide la orientación y el mirror. Los dos
+controles continuos de cada filtro entran normalizados por `uParam`/`uParam2`
+(0..1, el shader los reescala), y el HUD dice qué hace cada uno en el filtro
+activo.
+
+**Los cuatro filtros** (todos recolorean por uniforms — ningún hex dentro del
+GLSL — salvo los que sintetizan color):
+
+- **Basura 2600** (`tcccWj`, matrixmane) — teja la imagen y la cuantiza a una
+  paleta de 8 colores estilo Atari con bloques de glitch y jitter por scanline.
+  Fiel al original; la paleta de 8 se indexa con **cadena de `if`** (GLSL ES 1.00
+  no garantiza indexar arrays de uniforms con índice variable) y viaja desde
+  `PALETA.atari`.
+- **Rejilla de Onda** (`fcXSDS`, yonibr) — caleidoscopio fractal (`tex`,
+  `foldRotate`, incrusta *TheGrid* de dila `llcXWr`) enmascarado por el
+  **contorno** de la cámara (detección de bordes por luminancia). El original
+  animaba la rejilla con el espectro de una canción vía **buffers de audio** con
+  realimentación; como este filtro no tiene canal de audio en la galería, la fase
+  la mueve `uTiempo` y la cámara aporta el contorno (su rol de "procesar
+  píxeles"). Se pierde el ping-pong de buffers de audio. `round()` → `floor(x+.5)`.
+- **Espejo Complejo** (`scsGDH`, Refurio) — deforma la cámara elevando la
+  coordenada al cuadrado como número complejo (`z·z`), con caída a la imagen sin
+  deformar fuera de `[0,1)`. El original era un **buffer con realimentación** que
+  acumulaba brillo (su "dampening" por `iMouse.y`); acá es un solo pase sin
+  acumulación, con el brillo en perilla.
+- **Flujo Óptico** (Lucas–Kanade, gist 983) — estima el movimiento entre
+  `uCamara` y `uPrev` resolviendo el sistema del **tensor de estructura** por
+  ventana, rechaza features pobres por sus **valores propios** y pinta el flujo
+  en HSV (tono = dirección, valor = magnitud). El original lo repartía en **tres
+  buffers** (derivadas espaciales/temporales → tensor + Lucas-Kanade →
+  visualización) por costo y precisión; acá va **condensado en un pase** que usa
+  `uPrev` como la derivada temporal. `inverse()` de la `mat2` se resuelve por
+  Cramer (no existe en ES 1.00). **Rendimiento:** es el más caro (ventana de
+  `(2·3+1)² = 49` muestras × 4 fetches por píxel); `pixelDensity(1)` es la
+  palanca, y el Ajuste 2 separa las muestras sin subir su número.
+
+**Sin cámara** la pieza no queda negra: un **patrón de prueba** animado (franjas
+que se desplazan + un disco que rebota, en la paleta de la galería) da bordes y
+movimiento reales para que los cuatro filtros muestren algo vivo sin permiso.
+Selección de filtro por teclado (`1`–`4`, `←/→`, `n`), por el botón "Filtro ▸" o
+**tocando el lienzo** (`mousePressed` → siguiente).
 
 ## Átomos de Píxel (aparte)
 
@@ -808,3 +1390,9 @@ reescriben ni se borran entradas anteriores.
 | 2026-07-22 | `flor-shader` | Pétalos limitados a 3–10; textura de pétalos **sin verde** (paleta propia + tope duro del canal G); **fondo de oleaje** procedural (cuarto shader, cuad de pantalla completa); y **guardar al cerrar los ojos** vía Face Landmarker (nueva capacidad `onParpadeo` en `manosMediaPipe.ts`). |
 | 2026-07-22 | `flor-shader` | Fix del guardado por parpadeo: `onParpadeo` corre dentro de `actualizar()` al inicio de `draw()` (canvas recién limpiado → PNG negro). Se difiere con una bandera y `saveCanvas` se llama al **final** de `draw()`, con la flor ya dibujada. |
 | 2026-07-22 | `flor-manos` | Arreglo de la conexión a la cámara: biblioteca nueva `camara.ts` (menú de dispositivos + apertura del stream), sustituye a `createCapture` + `.hide()`. La pieza gana selector de cámara y su `source` pasa a `milpa/lib/sketches/florManos.ts` para que el panel `CodeBlock` muestre su código (`sync-originals.mjs` aprende a copiar piezas del repo propio). |
+| 2026-07-23 | — | Convención nueva: `lib/sketches/_entryShaderToy.glsl` como buzón de shaders de Shadertoy por portar (vacío = nada pendiente). `sketch-creator` aprende a leerlo, portarlo acreditando la fuente y vaciarlo después de usarlo. |
+| 2026-07-23 | `marea-manos` | Pieza nueva: simulación de fluido en GLSL (field sim de Wyatt Flanders) portada a p5 WEBGL con **ping-pong de dos framebuffers** en formato flotante, display pass propio que la pinta como mar (densidad → color, gradiente → luz, velocidad → espuma, naranja solo en las crestas) y la mano de MediaPipe en lugar del mouse: la palma vierte agua y el flanco del puño dispara impulsos radiales de implosión/explosión (histéresis + refractario). Primer algoritmo de la galería con estado persistente en la GPU. |
+| 2026-07-23 | `mascara-tunel` | Pieza nueva: **dos** shaders de Shadertoy cosidos en una escena — plasma acumulativo congelado (textura, centrada en la nariz) sobre una malla de 854 triángulos con la cara del visitante, viajando por un túnel raymarcheado que reemplaza su esfera `bl1` por la máscara y le hereda el resplandor. La cámara de p5 replica la del shader (FOV = 2·atan(0.5), `up` negado por la Y invertida de p5). Biblioteca nueva `caraMediaPipe.ts` (`RastreadorCara`: landmarks, triangulación derivada de los 3-ciclos del grafo de teselación, blendshapes por ojo separado). Interacción por ojos: izquierdo cambia la textura, derecho empuja la máscara hacia la cámara. |
+| 2026-07-23 | `fractal-julia` | Pieza nueva: conjunto de Julia audio-reactivo portado de Shadertoy (`llB3W1`, autor no indicado) a p5 WEBGL, con el triple sampleo del original. **Primera pieza con cámara y micrófono a la vez**: p5.sound FFT → textura de audio de 1 fila (espectro) para `iChannel0`, re-enfocada de *forma* a **intensidad/brillo global**; mano X → rotación de tono de la paleta (matriz de Rodrigues), mano Y → semilla del fractal. Reusa `RastreadorManos` y `camara.ts`; calcula la calidad con `break` por `uIters` (GLSL ES 1.00). Fallback a mouse (X paleta, Y forma) y perillas. |
+| 2026-07-23 | `caverna-impulso` | Pieza nueva: río subterráneo raymarcheado portado de Shadertoy (una pasada, sin ping-pong; sin autor, fuente probable "Rio Subterraneo" `4cyyRc` sin confirmar). Túnel que respira + agua con **doble marcha de refracción**; la esfera se quita del SDF pero se conserva su `lp` como luz (patrón de `mascaraTunel`). **Avance por impulso con inercia acumulable**: `iTime` deja de correr solo y se parte en `uAvance` (cámara, solo crece con impulsos) y `uTiempo` (ambiente = avance + deriva mínima); cada impulso suma a la velocidad y la fricción la frena, insistir acumula. Dos fuentes idénticas: botón/toque/espacio y **acercar la mano** (tamaño aparente muñeca→nudillo como proxy de profundidad, flanco con histéresis + refractario). `tanh` polyfilleada para GLSL ES 1.00; Knob "Calidad" por `break`. Reusa `RastreadorManos` y `camara.ts`. |
+| 2026-07-23 | `filtros-camara` | Pieza nueva: **banco de 4 filtros de post-proceso** de cámara portados juntos del buzón (Basura 2600 `tcccWj`/matrixmane; Rejilla de Onda `fcXSDS`/yonibr; Espejo Complejo `scsGDH`/Refurio; Flujo Óptico Lucas–Kanade gist 983). Convención común generalizada en un **registro `FILTROS`** con un solo pipeline: una cámara volcada a `p5.Graphics` (se re-sube como textura cada frame en p5 1.9.4) llega a todos como `uCamara`, con el cuadro anterior en `uPrev` para los temporales; muestreo centralizado por macros `CAM()`/`PREV()`. El flujo óptico va **condensado de 3 buffers a 1 pase** (`inverse` de mat2 por Cramer, ES 1.00); la rejilla cambia sus buffers de audio por `uTiempo` + contorno de cámara. Selector por teclado (`1`–`4`, `←/→`, `n`), botón o **toque en el lienzo**; patrón de prueba animado sin cámara. Reusa `camara.ts` (`Camara` directo, sin MediaPipe). Instrucciones para agregar filtros en la propia pieza. |

@@ -68,7 +68,7 @@ export default function SketchCard({ slug }: { slug: string }) {
         </div>
 
         <div className="flex min-w-0 flex-col md:flex-1">
-          <SketchInfo meta={meta} compact />
+          <SketchInfo meta={meta} compact sm/>
           <span className="mt-4 text-sm text-crema/40 transition group-hover:text-acento">
             Ver en grande →
           </span>

@@ -1,0 +1,826 @@
+3:I[4707,[],""]
+5:I[6423,[],""]
+4:["slug","marea-manos","d"]
+0:["YoqBrUQ9wPDnnJbxTInqe",[[["",{"children":["sketch",{"children":[["slug","marea-manos","d"],{"children":["__PAGE__?{\"slug\":\"marea-manos\"}",{}]}]}]},"$undefined","$undefined",true],["",{"children":["sketch",{"children":[["slug","marea-manos","d"],{"children":["__PAGE__",{},[["$L1","$L2",null],null],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children","$4","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[null,["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children","sketch","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]],null]},[[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/baadd18e5a8bbd5b.css","precedence":"next","crossOrigin":"$undefined"}]],["$","html",null,{"lang":"es","className":"__variable_bb2e19","children":["$","body",null,{"className":"min-h-screen font-mono text-crema antialiased","children":["$","$L3",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":"404"}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],"notFoundStyles":[]}]}]}]],null],null],["$L6",null]]]]
+6:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","1",{"charSet":"utf-8"}],["$","title","2",{"children":"Marea de Manos — MILPA"}],["$","meta","3",{"name":"description","content":"Un mar que se agita con la mano. Toda el agua vive en una textura de la GPU donde cada píxel guarda su velocidad, su presión y cuánta masa tiene; un shader la reescribe sesenta veces por segundo con cinco reglas de vecindad —advección, difusión de la presión, fuerza por su gradiente, realimentación por divergencia y conservación de masa, más gravedad— leyendo siempre el frame anterior desde un segundo lienzo oculto. El resultado se pinta como agua: la densidad da la profundidad del verde-azul, la pendiente de la superficie atrapa la luz y la velocidad enciende la espuma con destellos naranjas. Con la cámara encendida, la palma de la mano es el pincel que vierte agua, y abrir y cerrar el puño dispara un impulso radial: al cerrar, el mar se succiona hacia la mano; al abrir, sale despedido en una onda expansiva. Sin cámara se juega igual con el dedo sobre el lienzo y los botones de empujar y jalar."}],["$","link","4",{"rel":"icon","href":"/icon.svg?e5bdd04178928d30","type":"image/svg+xml","sizes":"any"}]]
+1:null
+7:I[9999,["648","static/chunks/648-a963bf0325acd59f.js","248","static/chunks/248-f5ede8c8cb4d11aa.js","935","static/chunks/app/sketch/%5Bslug%5D/page-1b83b5b0bf6ccfbe.js"],"default"]
+8:T7242,import type p5 from "p5";
+import type { SketchFactory } from "../types";
+import { Knob } from "../bibliotecas/knob";
+import { Boton, PanelEstado } from "../bibliotecas/boton";
+import { RastreadorManos } from "../bibliotecas/manosMediaPipe";
+import { SelectorCamara } from "../bibliotecas/camara";
+
+/**
+ * **Marea de Manos** — simulación de fluido en GLSL gobernada con la mano.
+ *
+ * El motor es el *field sim* de Wyatt Flanders ("Me And My Neighborhood",
+ * https://wyattflanders.com/MeAndMyNeighborhood.pdf), un autómata de campo que
+ * corre entero en la GPU sobre una textura RGBA donde cada canal guarda una
+ * magnitud física distinta:
+ *
+ *   `xy` velocidad (energía **ordenada**) · `b` presión (energía **desordenada**)
+ *   · `w` masa / densidad de agua.
+ *
+ * Y cinco reglas por píxel, cada una de un renglón (ver `SIM_FRAG`):
+ *   1. todo se **advecta** con la velocidad: leer en `posición − velocidad`;
+ *   2. la presión **difunde** al promedio de los 4 vecinos;
+ *   3. el **gradiente** de presión es una fuerza sobre la velocidad;
+ *   4. la **divergencia** de la velocidad realimenta la presión;
+ *   5. la masa se conserva por la divergencia de `velocidad·masa`,
+ *   más gravedad (`vy -= masa/300`) y bordes que anulan la velocidad.
+ *
+ * Como cada píxel necesita el frame anterior del campo (el suyo y el de sus
+ * vecinos), la pieza hace **ping-pong entre dos framebuffers**: se dibuja en A
+ * leyendo B, se intercambian y al frame siguiente al revés. Nunca se lee y se
+ * escribe la misma textura, que es lo que la GPU prohíbe.
+ *
+ * Diferencias con el original de Shadertoy:
+ *
+ * - El *display pass* del original es `color = densidad.wwww` (una nube gris).
+ *   Acá hay un shader de agua: la densidad decide la profundidad del azul-verde,
+ *   el gradiente de la densidad sirve de normal para iluminar la superficie, la
+ *   magnitud de la velocidad enciende la espuma y el naranja aparece solo como
+ *   destello en las crestas rápidas.
+ * - La inyección ya no es el mouse sino la **mano frente a la cámara**
+ *   (MediaPipe, vía `RastreadorManos`): el centro de la palma es el pincel de
+ *   agua, y **abrir y cerrar el puño** dispara un impulso radial que decae —
+ *   implosión al cerrar (el agua se succiona hacia la mano), onda expansiva al
+ *   abrir. Sin cámara, el dedo o el mouse sobre el lienzo hacen de pincel y los
+ *   botones Empujar / Jalar disparan los mismos impulsos.
+ * - Se agregan amortiguación (viscosidad) y topes de velocidad y masa: el
+ *   esquema original es explícito y sin ellos se desestabiliza cuando el
+ *   impulso de la mano es fuerte.
+ * - El campo arranca **sembrado** con un mar hasta `nivelMar` en vez de vacío,
+ *   para que haya agua que agitar desde el primer frame.
+ *
+ * Orientación de coordenadas (la parte que más se rompe al portar Shadertoy a
+ * p5 WEBGL): tanto la simulación como el display se dibujan con un cuad de
+ * pantalla completa cuyo vertex shader **ignora cámara y proyección** y mapea
+ * `aTexCoord` directo a clip space (`uv·2 − 1`). Así el mismo `uv` es a la vez
+ * la coordenada de escritura y la de lectura de la textura, y toda la cadena
+ * queda auto-consistente sin importar cómo oriente p5 su cámara. El costado:
+ * `uv.y = 0` es el **fondo** de la pantalla, así que la gravedad `−y` cae hacia
+ * abajo como en Shadertoy, y las posiciones que llegan en coordenadas de imagen
+ * (mano y mouse, con `y` hacia abajo) se invierten con `1 − y`.
+ */
+
+const SLUG = "marea-manos";
+
+/**
+ * Paleta del mar y del HUD. Los cinco colores del agua viajan al shader como
+ * uniforms (no hay ni un hex dentro del GLSL): base verde-agua de la galería,
+ * naranja reservado al destello de las crestas.
+ */
+const PALETA = {
+  cielo: "#050805", // matrix-black: el vacío sobre el agua
+  abismo: "#03191f", // fondo del mar, azul-verde casi negro
+  agua: "#0f7f6c", // cuerpo de agua, verde-agua
+  cresta: "#28d9a5", // agua en movimiento, verde-cian
+  espuma: "#b8fff0", // cian pálido de la espuma
+  destello: "#ff8c1a", // neon-orange: acento puntual en las crestas
+  hud: "#7fffa8", // matrix-text
+  hudLinea: "#143b22", // matrix-line
+  hudAcento: "#00ff41", // matrix-green
+} as const;
+
+const CONFIG = {
+  ancho: 900,
+  alto: 600,
+  /** Resolución del campo respecto al lienzo (0.5 = la mitad de lado). */
+  escalaSim: 0.5,
+  /** Altura inicial del mar, 0 = piso, 1 = techo. */
+  nivelMar: 0.42,
+  /** Radio del pincel de agua, en píxeles de la simulación. */
+  radioPincel: 26,
+  /** Magnitud del impulso radial del puño (unidades de velocidad). */
+  fuerzaImpulso: 1.1,
+  /** Radio del impulso, en píxeles de la simulación. */
+  radioImpulso: 70,
+  /** Cuánto sobrevive el impulso de un frame al siguiente (0–1). */
+  decaimientoImpulso: 0.86,
+  /** Gravedad: el original usa 1/300 por unidad de masa. */
+  gravedad: 0.0034,
+  /** Viscosidad 0–1 (0 = agua fina). Se traduce a amortiguación por frame. */
+  viscosidad: 0.12,
+  /** Amortiguación máxima de la velocidad con viscosidad = 1. */
+  amortiguacionMax: 0.06,
+  /** Topes de estabilidad del esquema explícito. */
+  velMax: 3,
+  masaMax: 1.6,
+  /** Puño: umbrales con histéresis (apertura 0 = puño, 1 = mano abierta). */
+  umbralCerrar: 0.3,
+  umbralAbrir: 0.55,
+  /** Refractario entre impulsos del puño, en ms. */
+  refractario: 320,
+  /** Distancia muñeca→nudillo medio de una mano "a distancia normal". */
+  escalaManoRef: 0.11,
+  preview: 200,
+};
+
+/**
+ * Vertex shader compartido por las dos pasadas: cuad de pantalla completa. No
+ * usa `uModelViewMatrix` ni `uProjectionMatrix` a propósito — la geometría que
+ * se le pase (un `plane()`) es irrelevante, solo importa su `aTexCoord`, que se
+ * mapea directo a clip space. Es lo que hace que escribir y leer el campo
+ * compartan el mismo sistema de coordenadas.
+ */
+const CUAD_VERT = `
+precision highp float;
+attribute vec3 aPosition;
+attribute vec2 aTexCoord;
+varying vec2 vUv;
+void main() {
+  vUv = aTexCoord;
+  gl_Position = vec4(aTexCoord * 2.0 - 1.0, 0.0, 1.0);
+}
+`;
+
+/**
+ * Pasada de simulación: el `Buffer A` de Shadertoy. Lee el campo del frame
+ * anterior (`uCampo`) y escribe el siguiente. Todas las posiciones van en
+ * píxeles del campo, como en el original, para que las reglas de vecindad
+ * (`±1 px`) signifiquen lo mismo.
+ */
+const SIM_FRAG = `
+precision highp float;
+varying vec2 vUv;
+
+uniform sampler2D uCampo;
+uniform vec2 uResolucion;
+
+uniform float uGravedad;
+uniform float uAmortiguacion;
+uniform float uVelMax;
+uniform float uMasaMax;
+
+uniform vec2 uPincel;         // centro del pincel, en px del campo
+uniform float uPincelActivo;  // 1 = hay mano o dedo inyectando
+uniform float uPincelRadio;   // px
+
+uniform vec2 uImpulso;        // centro del impulso radial, en px del campo
+uniform float uImpulsoFuerza; // + explosión (abrir), − implosión (cerrar)
+uniform float uImpulsoRadio;  // px
+
+uniform float uSembrar;       // 1 = reinicio: se rellena el mar
+uniform float uNivelMar;      // 0–1
+
+#define LOOKUP(COORD) texture2D(uCampo, (COORD) / uResolucion)
+
+// Regla 1: toda la energía se traslada con la energía ordenada. Se estima la
+// velocidad en el punto y se lee el campo "de dónde vino" (advección semi-
+// lagrangiana de un solo paso).
+vec4 campo(vec2 posicion) {
+  vec2 velocidad = LOOKUP(posicion).xy;
+  return LOOKUP(posicion - velocidad);
+}
+
+void main() {
+  vec2 Me = vUv * uResolucion;
+
+  // Siembra: mar lleno hasta uNivelMar, con el borde difuso para que la
+  // superficie no arranque como un escalón duro.
+  if (uSembrar > 0.5) {
+    float nivel = uNivelMar * uResolucion.y;
+    // 1 − smoothstep y no smoothstep con los bordes invertidos: con edge0 > edge1
+    // el resultado es *indefinido* según la especificación de GLSL.
+    float masa = 1.0 - smoothstep(nivel - 5.0, nivel + 5.0, Me.y);
+    gl_FragColor = vec4(0.0, 0.0, 0.0, masa);
+    return;
+  }
+
+  vec4 E = campo(Me);
+  vec4 pX = campo(Me + vec2(1.0, 0.0));
+  vec4 pY = campo(Me + vec2(0.0, 1.0));
+  vec4 nX = campo(Me - vec2(1.0, 0.0));
+  vec4 nY = campo(Me - vec2(0.0, 1.0));
+
+  // Regla 2: la energía desordenada (presión) difunde por completo.
+  E.b = (pX.b + pY.b + nX.b + nY.b) / 4.0;
+
+  // Regla 3: el orden dentro del desorden crea orden — el gradiente de presión
+  // es una fuerza sobre la velocidad.
+  vec2 fuerza = vec2(nX.b - pX.b, nY.b - pY.b);
+  E.xy += fuerza / 4.0;
+
+  // Regla 4: el desorden dentro del orden crea desorden — la divergencia de la
+  // velocidad realimenta la presión.
+  E.b += (nX.x - pX.x + nY.y - pY.y) / 4.0;
+
+  // Gravedad: proporcional a la masa de la celda.
+  E.y -= E.w * uGravedad;
+
+  // Conservación de masa: divergencia del flujo velocidad·masa.
+  E.w += (nX.x * nX.w - pX.x * pX.w + nY.y * nY.w - pY.y * pY.w) / 4.0;
+
+  // Viscosidad (no está en el original): sin ella el esquema explícito acumula
+  // energía con cada impulso fuerte hasta reventar en ruido.
+  E.xy *= uAmortiguacion;
+
+  // Impulso radial del puño, con perfil gaussiano y signo: hacia afuera al
+  // abrir la mano, hacia el centro al cerrarla.
+  if (abs(uImpulsoFuerza) > 0.0001) {
+    vec2 d = Me - uImpulso;
+    float dist = length(d);
+    float sigma = max(uImpulsoRadio * 0.5, 1.0);
+    float perfil = exp(-(dist * dist) / (2.0 * sigma * sigma));
+    vec2 dir = dist > 0.001 ? d / dist : vec2(0.0);
+    E.xy += dir * uImpulsoFuerza * perfil;
+  }
+
+  // Pincel: la mano (o el dedo sobre el lienzo) deposita agua.
+  if (uPincelActivo > 0.5) {
+    float d = length(Me - uPincel);
+    E.w = max(E.w, 1.0 - smoothstep(uPincelRadio * 0.25, uPincelRadio, d));
+  }
+
+  // Bordes: 10 px de pared que anulan la velocidad (el agua no se escapa).
+  if (Me.x < 10.0 || Me.y < 10.0 ||
+      uResolucion.x - Me.x < 10.0 || uResolucion.y - Me.y < 10.0) {
+    E.xy *= 0.0;
+  }
+
+  // Topes de estabilidad.
+  E.xy = clamp(E.xy, vec2(-uVelMax), vec2(uVelMax));
+  E.b = clamp(E.b, -1.0, 1.0);
+  E.w = clamp(E.w, 0.0, uMasaMax);
+
+  gl_FragColor = E;
+}
+`;
+
+/**
+ * Pasada de display: convierte el campo en mar. Reemplaza al `color = .wwww`
+ * del original (que sale como una nube gris). La densidad decide el color del
+ * agua, su gradiente hace de normal para iluminar la superficie y la magnitud
+ * de la velocidad enciende espuma y destellos.
+ */
+const AGUA_FRAG = `
+precision highp float;
+varying vec2 vUv;
+
+uniform sampler2D uCampo;
+uniform vec2 uResolucion;
+uniform float uTiempo;
+
+uniform vec3 uCielo;
+uniform vec3 uAbismo;
+uniform vec3 uAgua;
+uniform vec3 uCresta;
+uniform vec3 uEspuma;
+uniform vec3 uDestello;
+
+void main() {
+  vec4 E = texture2D(uCampo, vUv);
+  float masa = E.w;
+  float vel = length(E.xy);
+
+  // Normal de la superficie a partir del gradiente de la densidad: donde el
+  // agua sube o baja de golpe, la "pendiente" atrapa la luz.
+  vec2 px = 1.0 / uResolucion;
+  float gx = texture2D(uCampo, vUv + vec2(px.x, 0.0)).w
+           - texture2D(uCampo, vUv - vec2(px.x, 0.0)).w;
+  float gy = texture2D(uCampo, vUv + vec2(0.0, px.y)).w
+           - texture2D(uCampo, vUv - vec2(0.0, px.y)).w;
+  vec3 N = normalize(vec3(-gx, -gy, 0.35));
+  float luz = clamp(dot(N, normalize(vec3(-0.45, 0.6, 0.65))), 0.0, 1.0);
+
+  // Cuerpo de agua: del abismo al verde-agua según cuánta masa hay encima.
+  vec3 col = mix(uAbismo, uAgua, smoothstep(0.05, 0.8, masa));
+  col = mix(col, uCresta, smoothstep(0.75, 1.25, masa) * 0.75);
+
+  // Espuma: agua rápida y con superficie. La velocidad es la que la enciende.
+  float espuma = smoothstep(0.05, 0.32, vel) * smoothstep(0.02, 0.45, masa);
+  col = mix(col, uEspuma, espuma * 0.85);
+
+  // Reflejo especular sobre la pendiente + destello naranja, solo en las
+  // crestas más rápidas (acento puntual, no baña la escena).
+  col += uCresta * pow(luz, 3.0) * 0.35 * smoothstep(0.02, 0.35, masa);
+  col += uDestello * pow(luz, 8.0) * espuma * 1.2;
+
+  // Cardumen de luz: una modulación lenta que evita que el agua quieta se lea
+  // como una mancha plana.
+  float brillo = 0.94 + 0.06 * sin(vUv.x * 24.0 + uTiempo * 0.7)
+                             * sin(vUv.y * 18.0 - uTiempo * 0.5);
+  col *= brillo;
+
+  // Sobre la línea de agua queda el vacío.
+  col = mix(uCielo, col, smoothstep(0.0, 0.12, masa));
+
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+/**
+ * Detector de flancos del puño: histéresis (dos umbrales, no uno) más
+ * refractario, con la misma disciplina que `detectarParpadeo` de
+ * `manosMediaPipe.ts`. Con un solo umbral, una mano medio cerrada dispararía
+ * un impulso por frame; con dos, hay que cruzar de lado a lado para volver a
+ * disparar.
+ */
+class DetectorPuno {
+  private cerrado = false;
+  private ultimo = -Infinity;
+
+  /** `-1` al cerrar el puño, `+1` al abrirlo, `0` si no hubo flanco. */
+  actualizar(apertura: number, ahora: number): number {
+    const disponible = ahora - this.ultimo > CONFIG.refractario;
+    if (!this.cerrado && apertura < CONFIG.umbralCerrar) {
+      this.cerrado = true;
+      if (disponible) {
+        this.ultimo = ahora;
+        return -1;
+      }
+    } else if (this.cerrado && apertura > CONFIG.umbralAbrir) {
+      this.cerrado = false;
+      if (disponible) {
+        this.ultimo = ahora;
+        return 1;
+      }
+    }
+    return 0;
+  }
+
+  reiniciar(): void {
+    this.cerrado = false;
+  }
+}
+
+export const mareaManos: SketchFactory = (p: p5) => {
+  const rastreador = new RastreadorManos(p);
+  const detector = new DetectorPuno();
+
+  // --- Estado en clausura ---------------------------------------------------
+  let anchoSim = 0;
+  let altoSim = 0;
+  let campoA: p5.Framebuffer;
+  let campoB: p5.Framebuffer;
+  let shaderSim: p5.Shader;
+  let shaderAgua: p5.Shader;
+  /** El campo se guardó con menos precisión de la pedida (ver `formatoCampo`). */
+  let precisionBaja = false;
+
+  // Parámetros de las perillas.
+  let radioPincel = CONFIG.radioPincel;
+  let fuerzaImpulso = CONFIG.fuerzaImpulso;
+  let gravedad = CONFIG.gravedad;
+  let viscosidad = CONFIG.viscosidad;
+  let decaimiento = CONFIG.decaimientoImpulso;
+
+  // Pincel e impulso vivos (posiciones en uv del campo, con y hacia arriba).
+  let posPincel = { x: 0.5, y: CONFIG.nivelMar };
+  let pincelActivo = false;
+  let factorMano = 1;
+  let posImpulso = { x: 0.5, y: CONFIG.nivelMar };
+  let impulsoFuerza = 0;
+  let radioImpulso = CONFIG.radioImpulso;
+
+  let usarCamara = false;
+  let mostrarHud = true;
+  let sembrarProximoFrame = true;
+  let selectorCamara: SelectorCamara;
+  let panelEstado: PanelEstado;
+
+  p.setup = () => {
+    p.createCanvas(CONFIG.ancho, CONFIG.alto, p.WEBGL);
+    p.noStroke();
+    p.frameRate(60);
+
+    anchoSim = Math.round(CONFIG.ancho * CONFIG.escalaSim);
+    altoSim = Math.round(CONFIG.alto * CONFIG.escalaSim);
+
+    shaderSim = p.createShader(CUAD_VERT, SIM_FRAG);
+    shaderAgua = p.createShader(CUAD_VERT, AGUA_FRAG);
+
+    campoA = crearCampo();
+    campoB = crearCampo();
+
+    crearControles();
+  };
+
+  p.draw = () => {
+    // Limpia color **y profundidad** del lienzo. Sin esto, el cuad del display
+    // se dibuja siempre a la misma z y a partir del segundo frame el z-test lo
+    // descartaría: la imagen quedaría congelada en el primer frame.
+    p.background(PALETA.cielo);
+
+    if (usarCamara && rastreador.activo) rastreador.actualizar();
+    leerEntrada();
+
+    pasoSimulacion();
+    dibujarAgua();
+
+    if (mostrarHud) dibujarPreview();
+    panelEstado.actualizar(mostrarHud ? textoEstado() : "");
+
+    // El impulso es un golpe, no un estado: decae solo hasta apagarse.
+    impulsoFuerza *= decaimiento;
+    if (Math.abs(impulsoFuerza) < 0.001) impulsoFuerza = 0;
+  };
+
+  // --- Campo: dos framebuffers en ping-pong ---------------------------------
+
+  /**
+   * Formato de textura del campo. El campo guarda **velocidades negativas y
+   * fracciones muy chicas**, así que un target de 8 bits sin signo (el default)
+   * lo destruye. Se pide el mejor formato que el equipo pueda **renderizar y
+   * filtrar**: 32 bits necesita además `EXT_float_blend` (p5 deja el blending
+   * prendido incluso en modo REPLACE) y `OES_texture_float_linear` (la
+   * advección lee en coordenadas fraccionarias, o sea con filtro lineal). En
+   * WebGL2 el medio flotante ya es filtrable de fábrica, así que es la caída
+   * natural.
+   */
+  function formatoCampo(): string {
+    const gl = p.drawingContext as WebGLRenderingContext;
+    const es2 =
+      typeof WebGL2RenderingContext !== "undefined" &&
+      gl instanceof WebGL2RenderingContext;
+    if (es2) {
+      const renderizable = !!gl.getExtension("EXT_color_buffer_float");
+      if (
+        renderizable &&
+        gl.getExtension("EXT_float_blend") &&
+        gl.getExtension("OES_texture_float_linear")
+      ) {
+        return "float";
+      }
+      return renderizable ? "half-float" : "unsigned-byte";
+    }
+    return gl.getExtension("OES_texture_half_float") &&
+      gl.getExtension("OES_texture_half_float_linear")
+      ? "half-float"
+      : "unsigned-byte";
+  }
+
+  /**
+   * Un target del campo. `@types/p5` 1.7.6 declara `createFramebuffer` como
+   * `void` (y no conoce el formato `half-float`), de ahí los casts: en runtime
+   * p5 1.9.4 sí devuelve el `p5.Framebuffer`.
+   */
+  function crearCampo(): p5.Framebuffer {
+    const formato = formatoCampo();
+    const api = p as unknown as {
+      createFramebuffer(opciones: object): p5.Framebuffer;
+    };
+    const fb = api.createFramebuffer({
+      width: anchoSim,
+      height: altoSim,
+      density: 1, // el campo tiene su propia resolución, ajena al retina
+      format: formato,
+      channels: p.RGBA,
+      depth: false,
+      antialias: false, // un target multimuestreado no sirve como textura de datos
+    });
+    // p5 degrada el formato en silencio (solo un `console.warn`) si el equipo no
+    // lo soporta; conviene saberlo para avisarlo en el HUD, porque con 8 bits
+    // sin signo las velocidades negativas se pierden y el mar queda plano.
+    const real = (fb as unknown as { format: string }).format;
+    if (real !== formato || formato === "unsigned-byte") precisionBaja = true;
+    return fb;
+  }
+
+  /**
+   * Una pasada del autómata: dibuja en `destino` leyendo `origen`. Nunca se lee
+   * y se escribe la misma textura — de ahí el ping-pong.
+   */
+  function pasada(destino: p5.Framebuffer, origen: p5.Framebuffer, sembrar: boolean) {
+    p.push();
+    destino.begin();
+    // REPLACE y no BLEND: el shader escribe estado físico, no color. Con la
+    // mezcla normal, el canal `w` (masa) actuaría de alfa y el resultado se
+    // fundiría con el contenido viejo del target, corrompiendo el campo.
+    p.blendMode(p.REPLACE);
+    p.shader(shaderSim);
+    setTextura(shaderSim, "uCampo", origen);
+    shaderSim.setUniform("uResolucion", [anchoSim, altoSim]);
+    shaderSim.setUniform("uGravedad", gravedad);
+    shaderSim.setUniform("uAmortiguacion", 1 - viscosidad * CONFIG.amortiguacionMax);
+    shaderSim.setUniform("uVelMax", CONFIG.velMax);
+    shaderSim.setUniform("uMasaMax", CONFIG.masaMax);
+    shaderSim.setUniform("uPincel", [posPincel.x * anchoSim, posPincel.y * altoSim]);
+    shaderSim.setUniform("uPincelActivo", pincelActivo && !sembrar ? 1 : 0);
+    shaderSim.setUniform("uPincelRadio", radioPincel * factorMano);
+    shaderSim.setUniform("uImpulso", [
+      posImpulso.x * anchoSim,
+      posImpulso.y * altoSim,
+    ]);
+    shaderSim.setUniform("uImpulsoFuerza", sembrar ? 0 : impulsoFuerza);
+    shaderSim.setUniform("uImpulsoRadio", radioImpulso);
+    shaderSim.setUniform("uSembrar", sembrar ? 1 : 0);
+    shaderSim.setUniform("uNivelMar", CONFIG.nivelMar);
+    // El tamaño del plano da igual: el vertex shader lo manda a clip space a
+    // partir de la UV, no de la posición.
+    p.plane(anchoSim, altoSim);
+    destino.end();
+    p.blendMode(p.BLEND);
+    p.pop();
+  }
+
+  /** Avanza la simulación un frame e intercambia los dos targets. */
+  function pasoSimulacion() {
+    const sembrar = sembrarProximoFrame;
+    pasada(campoB, campoA, sembrar);
+    // Sembrar escribe un estado absoluto: hay que dejarlo en los DOS targets,
+    // porque el frame siguiente lee el que ahora queda de origen.
+    if (sembrar) {
+      pasada(campoA, campoB, true);
+      sembrarProximoFrame = false;
+    }
+
+    const previo = campoA;
+    campoA = campoB;
+    campoB = previo;
+  }
+
+  // --- Dibujo ---------------------------------------------------------------
+
+  /** Display pass: el campo se lee como agua, no como densidad gris. */
+  function dibujarAgua() {
+    p.push();
+    p.shader(shaderAgua);
+    setTextura(shaderAgua, "uCampo", campoA);
+    shaderAgua.setUniform("uResolucion", [anchoSim, altoSim]);
+    shaderAgua.setUniform("uTiempo", p.millis() / 1000);
+    shaderAgua.setUniform("uCielo", rgb(PALETA.cielo));
+    shaderAgua.setUniform("uAbismo", rgb(PALETA.abismo));
+    shaderAgua.setUniform("uAgua", rgb(PALETA.agua));
+    shaderAgua.setUniform("uCresta", rgb(PALETA.cresta));
+    shaderAgua.setUniform("uEspuma", rgb(PALETA.espuma));
+    shaderAgua.setUniform("uDestello", rgb(PALETA.destello));
+    p.plane(p.width, p.height);
+    p.pop();
+    p.resetShader();
+  }
+
+  /** Preview de la cámara con el esqueleto de las manos, abajo a la derecha. */
+  function dibujarPreview() {
+    if (!usarCamara) return;
+    const w = CONFIG.preview;
+    // WEBGL centra el origen: la esquina inferior derecha se calcula a mano.
+    const x = p.width / 2 - w - 16;
+    const y = p.height / 2 - w * 0.75 - 16;
+    p.push();
+    p.resetShader();
+    rastreador.dibujarPreview(x, y, w, {
+      linea: PALETA.hudAcento,
+      punto: PALETA.hud,
+      marco: PALETA.hudLinea,
+    });
+    p.pop();
+  }
+
+  // --- Entrada: mano, y si no hay, dedo/mouse -------------------------------
+
+  /**
+   * Decide de dónde sale el pincel este frame. La mano manda; si no hay mano
+   * (cámara apagada, sin permiso o sin detección) el dedo o el mouse sobre el
+   * lienzo hacen exactamente lo mismo, que es como funcionaba el original.
+   */
+  function leerEntrada() {
+    if (usarCamara && rastreador.activo && leerMano()) return;
+    detector.reiniciar();
+    factorMano = 1;
+    pincelActivo = p.mouseIsPressed && dentroDelLienzo();
+    if (pincelActivo) {
+      posPincel = {
+        x: p.mouseX / p.width,
+        y: 1 - p.mouseY / p.height, // la imagen tiene y hacia abajo; el campo no
+      };
+    }
+  }
+
+  function dentroDelLienzo(): boolean {
+    return (
+      p.mouseX >= 0 && p.mouseX <= p.width && p.mouseY >= 0 && p.mouseY <= p.height
+    );
+  }
+
+  /** Mano → pincel + impulsos del puño. Devuelve false si no hay mano en cuadro. */
+  function leerMano(): boolean {
+    const manos = rastreador.estado.manos;
+    if (manos.length === 0) {
+      detector.reiniciar();
+      pincelActivo = false;
+      return false;
+    }
+    const mano = manos[0];
+    posPincel = {
+      x: p.constrain(mano.centro.x, 0, 1),
+      y: 1 - p.constrain(mano.centro.y, 0, 1),
+    };
+    pincelActivo = true;
+
+    // Tamaño aparente de la mano (muñeca → nudillo medio): con la mano cerca de
+    // la cámara el pincel y el impulso crecen, como si el gesto tuviera alcance.
+    const escala = Math.hypot(
+      mano.puntos[0].x - mano.puntos[9].x,
+      mano.puntos[0].y - mano.puntos[9].y,
+    );
+    factorMano = p.constrain(escala / CONFIG.escalaManoRef, 0.5, 2.2);
+
+    const flanco = detector.actualizar(mano.apertura, p.millis());
+    if (flanco !== 0) dispararImpulso(flanco);
+    return true;
+  }
+
+  /** `+1` explosión (abrir la mano), `-1` implosión (cerrar el puño). */
+  function dispararImpulso(signo: number) {
+    posImpulso = { ...posPincel };
+    radioImpulso = CONFIG.radioImpulso * factorMano;
+    impulsoFuerza = signo * fuerzaImpulso;
+  }
+
+  // --- Controles táctiles ----------------------------------------------------
+
+  function crearControles() {
+    new Knob(p, {
+      etiqueta: "Pincel",
+      min: 6,
+      max: 80,
+      valor: radioPincel,
+      paso: 1,
+      onChange: (v) => {
+        radioPincel = v;
+      },
+    }).position(12, 10);
+
+    new Knob(p, {
+      etiqueta: "Impulso",
+      min: 0,
+      max: 3,
+      valor: fuerzaImpulso,
+      paso: 0.05,
+      onChange: (v) => {
+        fuerzaImpulso = v;
+      },
+    }).position(76, 10);
+
+    new Knob(p, {
+      etiqueta: "Gravedad",
+      min: 0,
+      max: 0.012,
+      valor: gravedad,
+      paso: 0.0002,
+      onChange: (v) => {
+        gravedad = v;
+      },
+    }).position(140, 10);
+
+    // "Espesor" y "Duración" en vez de "Viscosidad" y "Decaimiento": el Knob
+    // mide 48 px y una etiqueta larga se parte en dos renglones, rompiendo la
+    // alineación de la fila.
+    new Knob(p, {
+      etiqueta: "Espesor",
+      min: 0,
+      max: 1,
+      valor: viscosidad,
+      paso: 0.01,
+      onChange: (v) => {
+        viscosidad = v;
+      },
+    }).position(204, 10);
+
+    new Knob(p, {
+      etiqueta: "Duración",
+      min: 0.6,
+      max: 0.97,
+      valor: decaimiento,
+      paso: 0.01,
+      onChange: (v) => {
+        decaimiento = v;
+      },
+    }).position(268, 10);
+
+    // Menú de cámaras: los `label` de `enumerateDevices()` llegan vacíos hasta
+    // que hay permiso, por eso el selector trae su propio botón "Buscar".
+    selectorCamara = new SelectorCamara(p, {
+      ancho: 200,
+      onCambio: (deviceId) => {
+        // Cambio en caliente: se reabre el stream sin recargar el modelo.
+        if (usarCamara) void rastreador.iniciar(deviceId);
+      },
+    });
+    selectorCamara.position(660, 10);
+
+    new Boton(p, {
+      etiqueta: "Cámara",
+      alternar: true,
+      acento: "naranja",
+      onPress: (activo) => {
+        usarCamara = activo;
+        if (activo) void rastreador.iniciar(selectorCamara.valor());
+        else rastreador.detener();
+      },
+    }).position(12, 540);
+
+    new Boton(p, {
+      etiqueta: "Limpiar",
+      onPress: () => reiniciarCampo(),
+    }).position(130, 540);
+
+    // Equivalente táctil del puño para quien no tenga cámara.
+    new Boton(p, {
+      etiqueta: "Empujar",
+      onPress: () => dispararImpulso(1),
+    }).position(218, 540);
+
+    new Boton(p, {
+      etiqueta: "Jalar",
+      onPress: () => dispararImpulso(-1),
+    }).position(306, 540);
+
+    new Boton(p, {
+      etiqueta: "HUD",
+      alternar: true,
+      activo: true,
+      onPress: (activo) => {
+        mostrarHud = activo;
+      },
+    }).position(380, 540);
+
+    new Boton(p, {
+      etiqueta: "Guardar",
+      onPress: () => p.saveCanvas(SLUG, "png"),
+    }).position(468, 540);
+
+    // El estado va en un panel DOM: en WEBGL, `text()` exige una fuente cargada
+    // con `loadFont`.
+    panelEstado = new PanelEstado(p);
+    panelEstado.position(12, 508);
+  }
+
+  function reiniciarCampo() {
+    impulsoFuerza = 0;
+    detector.reiniciar();
+    sembrarProximoFrame = true;
+  }
+
+  // --- HUD -------------------------------------------------------------------
+
+  function textoEstado(): string {
+    const aviso = precisionBaja
+      ? "  ⚠ campo en baja precisión (sin texturas flotantes)"
+      : "";
+    if (!usarCamara) {
+      return `cámara: apagada — arrastrá el dedo sobre el agua${aviso}`;
+    }
+    switch (rastreador.fase) {
+      case "cargando":
+        return `cámara: cargando modelo…${aviso}`;
+      case "sin-permiso":
+        return `cámara: permiso denegado — el dedo hace de pincel${aviso}`;
+      case "error":
+        return `cámara: error — ${rastreador.mensaje}${aviso}`;
+      case "activo": {
+        const manos = rastreador.estado.manos;
+        if (manos.length === 0) {
+          return `sin detección — mostrá la mano a la cámara${aviso}`;
+        }
+        const mano = manos[0];
+        const gesto = mano.puno ? "puño" : "abierta";
+        return `mano: ${gesto}  apertura: ${mano.apertura.toFixed(2)}  alcance: ${factorMano.toFixed(
+          2,
+        )}×  impulso: ${impulsoFuerza.toFixed(2)}${aviso}`;
+      }
+      default:
+        return `cámara: apagada${aviso}`;
+    }
+  }
+
+  // --- Utilidades ------------------------------------------------------------
+
+  /** Hex de `PALETA` → `[r, g, b]` en 0–1, que es lo que espera el shader. */
+  function rgb(hex: string): number[] {
+    const c = p.color(hex);
+    return [p.red(c) / 255, p.green(c) / 255, p.blue(c) / 255];
+  }
+
+  /**
+   * `setUniform` de una textura de framebuffer. p5 1.9.4 acepta el
+   * `p5.Framebuffer` (lo resuelve a su textura de color en `getTexture`), pero
+   * `@types/p5` no lo lista entre los tipos válidos.
+   */
+  function setTextura(sh: p5.Shader, nombre: string, fb: p5.Framebuffer) {
+    sh.setUniform(nombre, fb as unknown as p5.Graphics);
+  }
+
+  // --- Manejadores -----------------------------------------------------------
+
+  // p5 mapea el toque de un dedo a los eventos de mouse, y el pincel se lee
+  // cada frame desde `p.mouseIsPressed` en `leerEntrada` (así el arrastre pinta
+  // continuo, con dedo igual que con mouse). Este manejador solo **ancla** el
+  // punto tocado, para que los botones Empujar / Jalar disparen su impulso
+  // donde el usuario tocó por última vez, aunque ya haya soltado.
+  p.mousePressed = () => {
+    if (!dentroDelLienzo()) return;
+    posPincel = { x: p.mouseX / p.width, y: 1 - p.mouseY / p.height };
+  };
+
+  p.keyPressed = () => {
+    if (p.key === "s" || p.key === "S") p.saveCanvas(SLUG, "png");
+    if (p.key === "h" || p.key === "H") mostrarHud = !mostrarHud;
+    if (p.key === "c" || p.key === "C") reiniciarCampo();
+  };
+};
+2:["$","$L7",null,{"slug":"marea-manos","code":"$8"}]
